@@ -1,0 +1,214 @@
+---
+title: "aml"
+subtitle: "Mini-Challenge 1"
+author: "Pascal Berger"
+date: "18. Oktober 2022"
+output:
+  html_notebook:
+    toc: true
+    toc_depth: 4
+    df_print: paged
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    theme: united
+    highlight: tango
+    code_folding: hide
+---
+R-Version: **[Default] [64-bit] C:\\Program Files\\R\\R-4.1.0**
+
+
+```{r echo=FALSE, cache=FALSE, results=FALSE, comment=FALSE, warning=FALSE}
+# clear environment
+rm(list = ls())
+
+# nötige Packete
+packages <- c("tidyverse", "data.table", "tidymodels")
+
+# Noch nicht installierte Pakete installieren
+installed_packages <- packages %in% rownames(installed.packages())
+
+if (any(installed_packages == FALSE)) {
+  install.packages(packages[!installed_packages])
+}
+
+# Laden der Packete
+invisible(lapply(packages, library, character.only = TRUE))
+
+# change options
+options(dplyr.summarise.inform = FALSE)
+```
+
+In folgendem Junk werden alle Tabellen aus den CSV's eingelesen.
+```{r}
+root_path <- "./xselling_banking_data-1/xselling_banking_data/"
+
+account <- read.csv(paste0(root_path, "account.csv"), header = TRUE, sep = ";")
+card <- read.csv(paste0(root_path, "card.csv"), header = TRUE, sep = ";")
+client <- read.csv(paste0(root_path, "client.csv"), header = TRUE, sep = ";")
+disp <- read.csv(paste0(root_path, "disp.csv"), header = TRUE, sep = ";")
+district <- read.csv(paste0(root_path, "district.csv"), sep = ";")
+loan <- read.csv(paste0(root_path, "loan.csv"), header = TRUE, sep = ";")
+order <- read.csv(paste0(root_path, "order.csv"), header = TRUE, sep = ";")
+trans <- read.csv(paste0(root_path, "trans.csv"), header = TRUE, sep = ";")
+```
+
+```{r}
+account
+```
+Bei account muss das Datum noch umgewandlet werden.
+
+```{r}
+account$date <- as.Date(as.character(account$date), format= "%y%m%d")
+```
+
+
+```{r}
+card
+```
+Auch bei card muss das Datum umgewandelt werden, der Zeit Teil wird ignoriert, da er immer 0 ist.
+
+```{r}
+card$issued <- as.Date(as.character(card$issued), format= "%y%m%d")
+```
+
+
+```{r}
+client
+```
+
+```{r}
+#Neue Spalte mit dem Geschlecht einfügen
+client <- mutate(client, gender = 
+                     ifelse(substr(birth_number, 3, 4) > 12, "female", "male"))
+
+#Die Spalte birth_number abändern. Temporäre Spalte birth_month generieren.
+client <- mutate(client, birth_month =
+                     ifelse(as.numeric(substr(birth_number, 3, 4)) > 12,
+                            as.numeric(substr(birth_number, 3, 4)) - 50,
+                            as.numeric(substr(birth_number, 3, 4))))
+
+client <- mutate(client, birth_number = paste("19",
+                                                substr(birth_number, 1, 2), 
+                                                str_pad(birth_month, 2,
+                                                        pad = "0"),
+                                                substr(birth_number, 5, 6),
+                   sep = "", collapse = NULL))
+
+#Format der Spalte birth_number ändern
+client$birth_number <- as.Date(as.character(client$birth_number),
+                               format= "%Y%m%d")
+#Spalte birth_month löschen
+client$birth_month <- NULL
+
+#Funktion für Alter der Kunden
+Get_Age <- function(birth_date) {
+  base_year <- 99
+  year <- substr(birth_date, 3, 4)
+  result <- base_year - as.integer(year)
+  
+  return(result)
+}
+
+#Neue Spalte für das Alter in der Tabelle 
+client <- client %>%
+   mutate(age = Get_Age(birth_number))
+```
+
+
+```{r}
+disp
+```
+
+Bei Dispositions sollen nur Owners verwendet werden
+```{r}
+disp <- disp %>% filter(type == 'OWNER')
+```
+
+
+```{r}
+district
+```
+
+Hier werden die Tabellennamen umbenannt, gemäss Doku.
+```{r}
+#Umbennenung der Werte in der Spalte district_id
+district <- rename(district, district_id = A1, district_name = A2, region = A3, 
+                   inhabitants = A4, municipalities_inhabitants_up_to_499 = A5, 
+                   municipalities_inhabitants_500_to_1999 = A6, 
+                   municipalities_inhabitants_2000_to_9999 = A7, 
+                   municipalities_inhabitants_up_to_10000 = A8, cities = A9, 
+                   urban_inhabitants_ratio = A10, average_salary = A11,
+                   unemployment_rate_95 = A12, unemployment_rate_96 = A13,
+                   entrepreneurs_per_1000 = A14, crimes_95 = A15,
+                   crimes_96 = A16)
+```
+
+
+
+```{r}
+loan
+```
+
+```{r}
+order
+```
+
+```{r}
+trans
+```
+
+
+Joining tables
+```{r}
+# Clients mit dispositions
+full <- inner_join(client, disp, by = "client_id", suffix = c(".client", ".dispositions"))
+sum(duplicated(full$client_id))
+
+# Full mit account
+full <- inner_join(full, account, by = "account_id", suffix = c("", ".accounts"))
+sum(duplicated(full$account_id))
+
+# Full mit loan
+sum(duplicated(loan$account_id))
+full <- left_join(full, loan, by = "account_id", suffix = c("", ".loans"))
+
+# Full mit cards
+full <- left_join(full, card, by = "disp_id", suffix = c("", ".cards"))
+sum(duplicated(card$disp_id))
+
+# District Informations for client
+full <- left_join(full, district, by = "district_id")
+
+# District informations for card
+full <- left_join(full, district, by = c("district_id.accounts"="district_id"), suffix = c("", ".accounts"))
+
+sample_n(full, 5)
+```
+
+
+```{r}
+full
+```
+
+```{r}
+colnames(full)
+```
+
+
+
+```{r}
+full
+```
+
+
+```{r}
+trans
+```
+
+
+
+
+
+
+
