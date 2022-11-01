@@ -23,7 +23,7 @@ R-Version: **[Default] [64-bit] C:\\Program Files\\R\\R-4.1.0**
 rm(list = ls())
 
 # nötige Packete
-packages <- c("tidyverse", "data.table", "tidymodels")
+packages <- c("tidyverse", "data.table", "tidymodels", "lubridate")
 
 # Noch nicht installierte Pakete installieren
 installed_packages <- packages %in% rownames(installed.packages())
@@ -40,6 +40,10 @@ options(dplyr.summarise.inform = FALSE)
 ```
 
 In folgendem Junk werden alle Tabellen aus den CSV's eingelesen.
+Doku Daten: https://sorry.vse.cz/~berka/challenge/PAST/index.html
+(rechte Seite PKDD'99 Challenge > Data > Financial Data Description)
+
+
 ```{r}
 root_path <- "./xselling_banking_data-1/xselling_banking_data/"
 
@@ -66,7 +70,7 @@ account$date <- as.Date(as.character(account$date), format= "%y%m%d")
 ```{r}
 card
 ```
-Auch bei card muss das Datum umgewandelt werden, der Zeit Teil wird ignoriert, da er immer 0 ist.
+Auch bei card muss das Datum umgewandelt werden, der zeitliche Teil wird ignoriert, da er immer 0 ist.
 
 ```{r}
 card$issued <- as.Date(as.character(card$issued), format= "%y%m%d")
@@ -77,42 +81,33 @@ card$issued <- as.Date(as.character(card$issued), format= "%y%m%d")
 client
 ```
 
+In der Tabelle existiert die Spalte birth_number, welcher man auf den ersten Blick die Datumsräpresentation nicht ansieht.
+In der Doku wird die Struktur deutlich, sie ist für Männer YYMMDD und für Frauen YYMMDD+50DD.
+In Folge wird die Nummer in ihre Datumsräpresentation konvertiert und die Spalte "gender" als male/female aufgeschlüsselt.
+Zudem wird das Alter der clients im Jahre 2022 herausextrahiert.
+Es wird nicht year(Sys.Date()) verwendet, damit die Daten auch in Zukunft konsistent blieben.
+
+
+
 ```{r}
 #Neue Spalte mit dem Geschlecht einfügen
-client <- mutate(client, gender = 
-                     ifelse(substr(birth_number, 3, 4) > 12, "female", "male"))
+client <- client %>% mutate(gender = ifelse(substr(birth_number, 3, 4) > 12, "female", "male"))
 
 #Die Spalte birth_number abändern. Temporäre Spalte birth_month generieren.
-client <- mutate(client, birth_month =
-                     ifelse(as.numeric(substr(birth_number, 3, 4)) > 12,
+client <- client %>% mutate(birth_month = ifelse(as.numeric(substr(birth_number, 3, 4)) > 12,
                             as.numeric(substr(birth_number, 3, 4)) - 50,
                             as.numeric(substr(birth_number, 3, 4))))
 
-client <- mutate(client, birth_number = paste("19",
-                                                substr(birth_number, 1, 2), 
-                                                str_pad(birth_month, 2,
-                                                        pad = "0"),
-                                                substr(birth_number, 5, 6),
-                   sep = "", collapse = NULL))
+client <- client %>% mutate(birth_number = paste("19", substr(birth_number, 1, 2), str_pad(birth_month, 2, pad = "0"), substr(birth_number, 5, 6), sep = "", collapse = NULL))
 
 #Format der Spalte birth_number ändern
-client$birth_number <- as.Date(as.character(client$birth_number),
-                               format= "%Y%m%d")
+client$birth_number <- as.Date(as.character(client$birth_number), format= "%Y%m%d")
 #Spalte birth_month löschen
 client$birth_month <- NULL
 
-#Funktion für Alter der Kunden
-Get_Age <- function(birth_date) {
-  base_year <- 99
-  year <- substr(birth_date, 3, 4)
-  result <- base_year - as.integer(year)
-  
-  return(result)
-}
 
 #Neue Spalte für das Alter in der Tabelle 
-client <- client %>%
-   mutate(age = Get_Age(birth_number))
+client <- client %>% mutate(age = 2022 - year(birth_number))
 ```
 
 
@@ -120,17 +115,15 @@ client <- client %>%
 disp
 ```
 
-Bei Dispositions sollen nur Owners verwendet werden
+Bei Dispositions sollen nur Owners verwendet werden, da die Analyse nur Eigentümer von Konten behandeln soll.
+
 ```{r}
 disp <- disp %>% filter(type == 'OWNER')
 ```
 
-
-```{r}
-district
-```
-
+Bei district sind die Spaltennamen der Tabelle abhanden gekommen.
 Hier werden die Tabellennamen umbenannt, gemäss Doku.
+
 ```{r}
 #Umbennenung der Werte in der Spalte district_id
 district <- rename(district, district_id = A1, district_name = A2, region = A3, 
@@ -145,21 +138,17 @@ district <- rename(district, district_id = A1, district_name = A2, region = A3,
 ```
 
 
+In den Transaktionen muss das Datum gemäss Format YYMMDD konvertiert werden.
 
 ```{r}
-loan
-```
-
-```{r}
-order
-```
-
-```{r}
-trans
+trans$date <- as.Date(as.character(trans$date), format= "%y%m%d")
 ```
 
 
-Joining tables
+In diesem Abschnitt werden die verschiedenen Tabellen zusammen gesetzt.
+Dabei werden loan, cards und district it left join angehängt, damit fehlende Spalten nicht den Datensatz verkleinern.
+Die Transaktionsdaten werden hier noch nicht zusammengeführt.
+
 ```{r}
 # Clients mit dispositions
 full <- inner_join(client, disp, by = "client_id", suffix = c(".client", ".dispositions"))
@@ -191,20 +180,36 @@ sample_n(full, 5)
 full
 ```
 
-```{r}
-colnames(full)
-```
-
+Als nächstes werden alle Zeilen mit Kreditkartenkäufen herausgeschrieben.
 
 
 ```{r}
-full
+client_analytical_record <- full %>% filter(!is.na(date))
+sum(duplicated(client_analytical_record$client_id))
 ```
+Es liegen keine Kunden vor, welche mehr als einmal eine Kreditkarte gekauft haben.
+
+
+In diesem Abschnitt werden alle Transaktionen bis 12 Monate vor dem Kreditkartenkauf herausgefiltert.
 
 
 ```{r}
-trans
+trans 
 ```
+
+```{r}
+
+window <- left_join(trans, client_analytical_record[ , c("client_id", "account_id", "issued")], by='account_id')
+
+# get all transaction withing 12 month prior to credit card issuance
+window <- window %>% group_by(client_id) %>% filter(date %m+% months(12) > issued & date < issued) %>% ungroup()
+
+# mark all transactions within 1 month prior to card issuance as lag
+window <- window %>% mutate(lag = ifelse(date %m+% months(1) > issued, 1, 0))
+
+window
+```
+
 
 
 
