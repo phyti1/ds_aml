@@ -84,7 +84,7 @@ client
 In der Tabelle existiert die Spalte birth_number, welcher man auf den ersten Blick die Datumsräpresentation nicht ansieht.
 In der Doku wird die Struktur deutlich, sie ist für Männer YYMMDD und für Frauen YYMMDD+50DD.
 In Folge wird die Nummer in ihre Datumsräpresentation konvertiert und die Spalte "gender" als male/female aufgeschlüsselt.
-Zudem wird das Alter der clients im Jahre 2022 herausextrahiert.
+Zudem wird das Alter der clients bezogen auf das Jahr 1999 herausextrahiert, da der Datensatz aus diesem Jahr stammt.
 Es wird nicht year(Sys.Date()) verwendet, damit die Daten auch in Zukunft konsistent blieben.
 
 
@@ -107,7 +107,7 @@ client$birth_month <- NULL
 
 
 #Neue Spalte für das Alter in der Tabelle 
-client <- client %>% mutate(age = 2022 - year(birth_number))
+client <- client %>% mutate(age = 1999 - year(birth_number))
 ```
 
 
@@ -175,6 +175,17 @@ full <- left_join(full, district, by = c("district_id.accounts"="district_id"), 
 sample_n(full, 5)
 ```
 
+Jugendliche und Personen, welche während des Zeitraums des Datensatzes erst erwachsen worden sind, sollen nicht in die Auswertung einfliessen.
+Da sicher der Datensatz über einen Zeitraum von sechs Jahren erstrekt werden alle Clients jünger als 25 Jahre herausgefiltert.
+
+```{r}
+min(trans$date)
+max(trans$date)
+
+full <- full %>% filter(age >= 25)
+```
+
+
 
 ```{r}
 full
@@ -184,18 +195,83 @@ Als nächstes werden alle Zeilen mit Kreditkartenkäufen herausgeschrieben.
 
 
 ```{r}
-client_analytical_record <- full %>% filter(!is.na(date))
-sum(duplicated(client_analytical_record$client_id))
+card_buyers <- full %>% filter(!is.na(issued))
+sum(duplicated(card_buyers$client_id))
 ```
 Es liegen keine Kunden vor, welche mehr als einmal eine Kreditkarte gekauft haben.
 
 
-In diesem Abschnitt werden alle Transaktionen bis 12 Monate vor dem Kreditkartenkauf herausgefiltert.
+Zu jedem Kartenkäufer soll ein ähnlicher Nicht Käufer gefunden werden.
+sie sollen sich in Alter und Geschlecht ähnlich sein.
 
 
 ```{r}
-trans 
+setdiff(non_buyer, non_buyers_reduced)
 ```
+
+
+```{r}
+non_buyers <- full %>% filter(is.na(issued))
+
+# copy and clear df reduced
+non_buyers_reduced <- data.frame(non_buyers)
+non_buyers_reduced <- non_buyers_reduced[0,]
+
+for (i in 1:nrow(card_buyers))
+{
+  buyer <- card_buyers[i, ]
+  non_buyer <- non_buyers %>% filter(age == buyer$age & gender == buyer$gender)
+  found = FALSE
+  if(nrow(non_buyer) < 1)
+  {
+    # handle if required
+  }
+  else
+  {
+    
+    # assure new values are added to the new df
+    # exclusive left join
+    
+    new <- setdiff(non_buyer, non_buyers_reduced)
+    if(nrow(new) > 0)
+    {
+      non_buyers_reduced <- rbind(non_buyers_reduced, new[1,])
+      found = TRUE
+    }
+  }
+  if(!found)
+  {
+    print("no matching non-buyer found!")
+  }
+}
+
+sum(duplicated(non_buyers_reduced))
+non_buyers_reduced
+
+```
+
+
+in folgendem Abschnitt werden die buyers und korrespondierenden non-buyers auf auf issued - 13 bis issued - 1 Monate gefiltert und anschliessend gruppiert.
+
+```{r}
+
+window <- left_join(trans, card_buyers[ , c("client_id", "account_id", "issued")], by='account_id')
+
+# get all transaction withing 12 month prior to credit card issuance
+window <- window %>% group_by(client_id) %>% filter(date %m+% months(13) > issued & date %m+% months(1) < issued) %>% ungroup()
+
+window <- group_by(month = lubridate::floor_date(issued, 'month')) %>% summarize(sum = sum(value_column))
+
+```
+
+
+
+---
+Spielwiese
+
+
+
+In diesem Abschnitt werden alle Transaktionen bis 12 Monate vor dem Kreditkartenkauf herausgefiltert.
 
 ```{r}
 
@@ -209,10 +285,7 @@ window <- window %>% mutate(lag = ifelse(date %m+% months(1) > issued, 1, 0))
 
 window
 ```
-
-
-
-
+```
 
 
 
