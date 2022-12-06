@@ -1,7 +1,7 @@
 ---
 title: "aml"
 subtitle: "Mini-Challenge 1"
-author: "Pascal Berger"
+author: "Pascal Berger und Raphael Strebel"
 date: "18. Oktober 2022"
 output:
   html_notebook:
