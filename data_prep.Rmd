@@ -206,11 +206,6 @@ sie sollen sich in Alter und Geschlecht ähnlich sein.
 
 
 ```{r}
-setdiff(non_buyer, non_buyers_reduced)
-```
-
-
-```{r}
 non_buyers <- full %>% filter(is.na(issued))
 
 # copy and clear df reduced
@@ -231,7 +226,6 @@ for (i in 1:nrow(card_buyers))
     
     # assure new values are added to the new df
     # exclusive left join
-    
     new <- setdiff(non_buyer, non_buyers_reduced)
     if(nrow(new) > 0)
     {
@@ -260,10 +254,15 @@ window <- left_join(trans, card_buyers[ , c("client_id", "account_id", "issued")
 # get all transaction withing 12 month prior to credit card issuance
 window <- window %>% group_by(client_id) %>% filter(date %m+% months(13) > issued & date %m+% months(1) < issued) %>% ungroup()
 
-window <- group_by(month = lubridate::floor_date(issued, 'month')) %>% summarize(sum = sum(value_column))
+window <- group_by(month = lubridate::floor_date(window$issued, 'month')) %>% summarize(sum = sum(value_column))
 
 ```
 
+
+
+```{r}
+window
+```
 
 
 ---
@@ -283,9 +282,9 @@ window <- window %>% group_by(client_id) %>% filter(date %m+% months(12) > issue
 # mark all transactions within 1 month prior to card issuance as lag
 window <- window %>% mutate(lag = ifelse(date %m+% months(1) > issued, 1, 0))
 
-window
+window 
 ```
-```
+
 
 
 
