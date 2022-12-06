@@ -17,6 +17,7 @@ output:
 ---
 R-Version: **[Default] [64-bit] C:\\Program Files\\R\\R-4.1.0**
 
+# Imports
 
 ```{r echo=FALSE, cache=FALSE, results=FALSE, comment=FALSE, warning=FALSE}
 # clear environment
@@ -43,6 +44,7 @@ In folgendem Junk werden alle Tabellen aus den CSV's eingelesen.
 Doku Daten: https://sorry.vse.cz/~berka/challenge/PAST/index.html
 (rechte Seite PKDD'99 Challenge > Data > Financial Data Description)
 
+# Cleaning
 
 ```{r}
 root_path <- "./xselling_banking_data-1/xselling_banking_data/"
@@ -200,6 +202,14 @@ sum(duplicated(card_buyers$client_id))
 ```
 Es liegen keine Kunden vor, welche mehr als einmal eine Kreditkarte gekauft haben.
 
+
+# Aufsummieren
+```{r}
+trans
+```
+
+
+# Aufteilung
 
 Zu jedem Kartenkäufer soll ein ähnlicher Nicht Käufer gefunden werden.
 sie sollen sich in Alter und Geschlecht ähnlich sein.
