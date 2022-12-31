@@ -32,7 +32,6 @@ installed_packages <- packages %in% rownames(installed.packages())
 if (any(installed_packages == FALSE)) {
   install.packages(packages[!installed_packages])
 }
-
 # Laden der Packete
 invisible(lapply(packages, library, character.only = TRUE))
 
@@ -44,43 +43,69 @@ In folgendem Junk werden alle Tabellen aus den CSV's eingelesen.
 Doku Daten: https://sorry.vse.cz/~berka/challenge/PAST/index.html
 (rechte Seite PKDD'99 Challenge > Data > Financial Data Description)
 
-# Cleaning
 
+# Einlesen der Daten
+
+Der Datensatz besteht aus acht verschiedenen Tabellen, welche teils durch Keys miteinander verknüpft sind.
 ```{r}
 root_path <- "./xselling_banking_data-1/xselling_banking_data/"
 
-account <- read.csv(paste0(root_path, "account.csv"), header = TRUE, sep = ";")
-card <- read.csv(paste0(root_path, "card.csv"), header = TRUE, sep = ";")
-client <- read.csv(paste0(root_path, "client.csv"), header = TRUE, sep = ";")
-disp <- read.csv(paste0(root_path, "disp.csv"), header = TRUE, sep = ";")
-district <- read.csv(paste0(root_path, "district.csv"), sep = ";")
-loan <- read.csv(paste0(root_path, "loan.csv"), header = TRUE, sep = ";")
-order <- read.csv(paste0(root_path, "order.csv"), header = TRUE, sep = ";")
-trans <- read.csv(paste0(root_path, "trans.csv"), header = TRUE, sep = ";")
+accounts <- read.csv(paste0(root_path, "account.csv"), header = TRUE, sep = ";")
+cards <- read.csv(paste0(root_path, "card.csv"), header = TRUE, sep = ";")
+clients <- read.csv(paste0(root_path, "client.csv"), header = TRUE, sep = ";")
+dispositions <- read.csv(paste0(root_path, "disp.csv"), header = TRUE, sep = ";")
+districts <- read.csv(paste0(root_path, "district.csv"), sep = ";")
+loans <- read.csv(paste0(root_path, "loan.csv"), header = TRUE, sep = ";")
+orders <- read.csv(paste0(root_path, "order.csv"), header = TRUE, sep = ";")
+transactions <- read.csv(paste0(root_path, "trans.csv"), header = TRUE, sep = ";")
 ```
 
+# Cleaning
+
+## Accounts
 ```{r}
-account
+sample_n(accounts, 5)
 ```
-Bei account muss das Datum noch umgewandlet werden.
+Die Account-Tabelle enthält vier Kolonnen: die Account-ID, die District-ID (welche auf die District-Tabelle verweist), die Frequenz, welche die Häufigkeit der Ausstellung der Abrechnungen als Kategorie besagt, und das Erstellungsdatum des Accounts. Die Frequenz kann eine von drei verschiedenen Werten annehmen.
 
 ```{r}
-account$date <- as.Date(as.character(account$date), format= "%y%m%d")
+unique(accounts$frequency)
 ```
 
+Nachfolgend sollen die Frequenz-Werte übersetzt und das Datum in ein richtiges Format transformiert werden. Ausserdem soll die Tabelle auf fehlende Werte überprüft werden.
 
 ```{r}
-card
+accounts$date <- as.Date(as.character(accounts$date), format= "%y%m%d")
+
+accounts$frequency[accounts$frequency == "POPLATEK MESICNE"]   <- "monthly"
+accounts$frequency[accounts$frequency == "POPLATEK TYDNE"]     <- "weekly"
+accounts$frequency[accounts$frequency == "POPLATEK PO OBRATU"] <- "after_transaction"
+
+sum(is.na(accounts))
+```
+
+Es gibt also keine fehlende Werte in diesem Dataframe.
+
+## Cards
+
+```{r}
+sample_n(cards, 5)
 ```
 Auch bei card muss das Datum umgewandelt werden, der zeitliche Teil wird ignoriert, da er immer 0 ist.
 
 ```{r}
-card$issued <- as.Date(as.character(card$issued), format= "%y%m%d")
+cards$issued <- as.Date(as.character(cards$issued), format= "%y%m%d")
+
+cards$type[cards$type == "gold"]     <- "classic"
+cards <- filter(cards, type == "classic")
+
+sum(is.na(cards))
 ```
 
+## Clients
 
 ```{r}
-client
+sample_n(clients, 10)
 ```
 
 In der Tabelle existiert die Spalte birth_number, welcher man auf den ersten Blick die Datumsräpresentation nicht ansieht.
@@ -92,60 +117,172 @@ Es wird nicht year(Sys.Date()) verwendet, damit die Daten auch in Zukunft konsis
 
 
 ```{r}
-#Neue Spalte mit dem Geschlecht einfügen
-client <- client %>% mutate(gender = ifelse(substr(birth_number, 3, 4) > 12, "female", "male"))
+# Months above 12 must be female
+clients <- mutate(clients, gender = 
+                     ifelse(substr(birth_number, 3, 4) > 12, "female", "male"))
 
-#Die Spalte birth_number abändern. Temporäre Spalte birth_month generieren.
-client <- client %>% mutate(birth_month = ifelse(as.numeric(substr(birth_number, 3, 4)) > 12,
+# Substract the 50 to get the birth month
+clients <- mutate(clients, birth_month =
+                     ifelse(as.numeric(substr(birth_number, 3, 4)) > 12,
                             as.numeric(substr(birth_number, 3, 4)) - 50,
                             as.numeric(substr(birth_number, 3, 4))))
 
-client <- client %>% mutate(birth_number = paste("19", substr(birth_number, 1, 2), str_pad(birth_month, 2, pad = "0"), substr(birth_number, 5, 6), sep = "", collapse = NULL))
+# Transform the birth_number to a date
+clients <- mutate(clients, birth_number = paste("19",
+                                                substr(birth_number, 1, 2), 
+                                                str_pad(birth_month, 2,
+                                                        pad = "0"),
+                                                substr(birth_number, 5, 6),
+                   sep = "", collapse = NULL))
+clients$birth_date <- as.Date(as.character(clients$birth_number),
+                               format= "%Y%m%d")
 
-#Format der Spalte birth_number ändern
-client$birth_number <- as.Date(as.character(client$birth_number), format= "%Y%m%d")
-#Spalte birth_month löschen
-client$birth_month <- NULL
+# Remove unused columns
+clients$birth_month <- NULL
+clients$birth_number <- NULL
 
+# Get the age of the clients in the year 1999 and save it in a column
+get_age <- function(birth_date) {
+  base_year <- 99
+  year <- substr(birth_date, 3, 4)
+  result <- base_year - as.integer(year)
+  
+  return(result)
+}
+clients <- clients %>%
+   mutate(age = get_age(birth_date))
 
-#Neue Spalte für das Alter in der Tabelle 
-client <- client %>% mutate(age = 1999 - year(birth_number))
+sum(is.na(clients))
+```
+```{r}
+accounts
+clients
 ```
 
 
+
+## Dispositions
+
 ```{r}
-disp
+sample_n(dispositions, 5)
 ```
 
 Bei Dispositions sollen nur Owners verwendet werden, da die Analyse nur Eigentümer von Konten behandeln soll.
 
 ```{r}
-disp <- disp %>% filter(type == 'OWNER')
+dispositions <- dispositions %>% filter(type == 'OWNER')
+
+sum(is.na(dispositions))
 ```
+
+## Districts
 
 Bei district sind die Spaltennamen der Tabelle abhanden gekommen.
 Hier werden die Tabellennamen umbenannt, gemäss Doku.
 
 ```{r}
-#Umbennenung der Werte in der Spalte district_id
-district <- rename(district, district_id = A1, district_name = A2, region = A3, 
-                   inhabitants = A4, municipalities_inhabitants_up_to_499 = A5, 
+districts <- rename(districts, district_id = A1, district_name = A2, region = A3, 
+                   inhabitants = A4, municipalities_inhabitants_smaller_499 = A5, 
                    municipalities_inhabitants_500_to_1999 = A6, 
                    municipalities_inhabitants_2000_to_9999 = A7, 
-                   municipalities_inhabitants_up_to_10000 = A8, cities = A9, 
+                   municipalities_inhabitants_larger_10000 = A8, cities = A9, 
                    urban_inhabitants_ratio = A10, average_salary = A11,
                    unemployment_rate_95 = A12, unemployment_rate_96 = A13,
                    entrepreneurs_per_1000 = A14, crimes_95 = A15,
                    crimes_96 = A16)
+
+sum(is.na(districts))
+```
+
+## Transactions
+
+```{r}
+sample_n(transactions, 5)
 ```
 
 
 In den Transaktionen muss das Datum gemäss Format YYMMDD konvertiert werden.
 
 ```{r}
-trans$date <- as.Date(as.character(trans$date), format= "%y%m%d")
+# Rename k_symbol
+transactions <- rename(transactions, c("characterization" = "k_symbol")) 
+
+# Change formats
+transactions$date <- as.Date(as.character(transactions$date), format= "%y%m%d")
+transactions$amount <- as.numeric(transactions$amount)
+transactions$balance <- as.numeric(transactions$balance)
+
+# Translate values
+transactions$type[transactions$type == "PRIJEM"] <- "credit"
+transactions$type[transactions$type == "VYDAJ"]  <- "withdrawal"
+transactions$type[transactions$type == "VYBER"]  <- "withdrawal"
+
+transactions$operation[transactions$operation == "VKLAD"]          <- "cash credit"
+transactions$operation[transactions$operation == "PREVOD Z UCTU"]  <- "collection"
+transactions$operation[transactions$operation == "VYBER"]          <- "cash withdrawal"
+transactions$operation[transactions$operation == " "]              <- "unknown"
+transactions$operation[transactions$operation == "PREVOD NA UCET"] <- "remittance"
+transactions$operation[transactions$operation == "VYBER KARTOU"]   <- "card withdrawal"
+
+transactions$characterization[transactions$characterization == " "] <- "unknown"
+transactions$characterization[transactions$characterization == "DUCHOD"] <- "pension"
+transactions$characterization[transactions$characterization == "UROK"] <- "interest"
+transactions$characterization[transactions$characterization == "SIPO"] <- "household"
+transactions$characterization[transactions$characterization == "SLUZBY"] <- "payment statement"
+transactions$characterization[transactions$characterization == "POJISTNE"] <- "insurance"
+transactions$characterization[transactions$characterization == "SANKC. UROK"]  <- "neg_interest"
+transactions$characterization[transactions$characterization == "UVER"]  <- "loan_pay"
+
+sum(is.na(transactions))
 ```
 
+## Orders
+
+```{r}
+sample_n(orders, 5)
+```
+
+```{r}
+# Rename column k_symbol
+orders <- rename(orders, "characterization" = "k_symbol") 
+
+# Translate column characterization
+orders$characterization[orders$characterization == "SIPO"]     <- "household"
+orders$characterization[orders$characterization == "UVER"]     <- "loan"
+orders$characterization[orders$characterization == "POJISTNE"] <- "insurance"
+orders$characterization[orders$characterization == "LEASING"]  <- "leasing"
+
+# Categorize NA as unknown
+orders$characterization[is.na(orders$characterization)] <- "unknown"
+
+orders$amount <- as.numeric(orders$amount)
+
+sum(is.na(loans))
+```
+
+
+## Loans
+
+```{r}
+sample_n(loans, 5)
+```
+
+```{r}
+loans$date <- as.Date(as.character(loans$date), format= "%y%m%d")
+loans$payments <- as.numeric(loans$payments)
+loans$amount <- as.numeric(loans$amount)
+
+# Make column status human readable
+loans$status[loans$status == "A"] <- "finished_payed"
+loans$status[loans$status == "B"] <- "finished_not_payed"
+loans$status[loans$status == "C"] <- "running_ok"
+loans$status[loans$status == "D"] <- "running_in_debt"
+
+sum(is.na(loans))
+```
+
+
+# Zusammenfügen der Dataframes
 
 In diesem Abschnitt werden die verschiedenen Tabellen zusammen gesetzt.
 Dabei werden loan, cards und district it left join angehängt, damit fehlende Spalten nicht den Datensatz verkleinern.
@@ -153,149 +290,377 @@ Die Transaktionsdaten werden hier noch nicht zusammengeführt.
 
 ```{r}
 # Clients mit dispositions
-full <- inner_join(client, disp, by = "client_id", suffix = c(".client", ".dispositions"))
+full <- inner_join(clients, dispositions, by = "client_id", suffix = c(".client", ".dispositions"))
 sum(duplicated(full$client_id))
 
 # Full mit account
-full <- inner_join(full, account, by = "account_id", suffix = c("", ".accounts"))
+full <- inner_join(full, accounts, by = "account_id", suffix = c("", ".accounts"))
 sum(duplicated(full$account_id))
 
 # Full mit loan
-sum(duplicated(loan$account_id))
-full <- left_join(full, loan, by = "account_id", suffix = c("", ".loans"))
+sum(duplicated(loans$account_id))
+full <- left_join(full, loans, by = "account_id", suffix = c("", ".loans"))
 
 # Full mit cards
-full <- left_join(full, card, by = "disp_id", suffix = c("", ".cards"))
-sum(duplicated(card$disp_id))
+full <- left_join(full, cards, by = "disp_id", suffix = c("", ".cards"))
+sum(duplicated(cards$disp_id))
 
 # District Informations for client
-full <- left_join(full, district, by = "district_id")
+full <- left_join(full, districts, by = "district_id")
 
 # District informations for card
-full <- left_join(full, district, by = c("district_id.accounts"="district_id"), suffix = c("", ".accounts"))
+full <- left_join(full, districts, by = c("district_id.accounts"="district_id"), suffix = c("", ".accounts"))
 
 sample_n(full, 5)
 ```
 
 Jugendliche und Personen, welche während des Zeitraums des Datensatzes erst erwachsen worden sind, sollen nicht in die Auswertung einfliessen.
-Da sicher der Datensatz über einen Zeitraum von sechs Jahren erstrekt werden alle Clients jünger als 25 Jahre herausgefiltert.
+Da sicher der Datensatz über einen Zeitraum von sechs Jahren erstreckt werden alle Clients jünger als 25 Jahre herausgefiltert.
 
 ```{r}
-min(trans$date)
-max(trans$date)
-
 full <- full %>% filter(age >= 25)
 ```
-
-
 
 ```{r}
 full
 ```
 
-Als nächstes werden alle Zeilen mit Kreditkartenkäufen herausgeschrieben.
+
+
+Als nächstes werden alle Zeilen mit Kreditkartenkäufern von den Nicht-Käufern getrennt
 
 
 ```{r}
-card_buyers <- full %>% filter(!is.na(issued))
-sum(duplicated(card_buyers$client_id))
-```
-Es liegen keine Kunden vor, welche mehr als einmal eine Kreditkarte gekauft haben.
-
-
-# Aufsummieren
-```{r}
-trans
-```
-
-
-# Aufteilung
-
-Zu jedem Kartenkäufer soll ein ähnlicher Nicht Käufer gefunden werden.
-sie sollen sich in Alter und Geschlecht ähnlich sein.
-
-
-```{r}
-non_buyers <- full %>% filter(is.na(issued))
-
-# copy and clear df reduced
-non_buyers_reduced <- data.frame(non_buyers)
-non_buyers_reduced <- non_buyers_reduced[0,]
-
-for (i in 1:nrow(card_buyers))
-{
-  buyer <- card_buyers[i, ]
-  non_buyer <- non_buyers %>% filter(age == buyer$age & gender == buyer$gender)
-  found = FALSE
-  if(nrow(non_buyer) < 1)
-  {
-    # handle if required
-  }
-  else
-  {
-    
-    # assure new values are added to the new df
-    # exclusive left join
-    new <- setdiff(non_buyer, non_buyers_reduced)
-    if(nrow(new) > 0)
-    {
-      non_buyers_reduced <- rbind(non_buyers_reduced, new[1,])
-      found = TRUE
-    }
-  }
-  if(!found)
-  {
-    print("no matching non-buyer found!")
+has_card_function <- function(x) {
+  if (is.na(x)) {
+    return(FALSE)
+  } else {
+    return(TRUE)
   }
 }
 
-sum(duplicated(non_buyers_reduced))
-non_buyers_reduced
+# Erstelle die neue Spalte "has_card" mit der apply()-Funktion und der oben definierten Funktion
+full$has_card <- sapply(full[, "card_id"], has_card_function)
+full <- full %>% select(-card_id, -type.cards)
 
+card_buyers <- full %>% filter(has_card == TRUE)
+
+non_buyers <- full %>% filter(has_card == FALSE)
+```
+
+Jetzt können wir noch einige Variabeln entfernen, welche keinen Einfluss auf das Modell haben sollten. 
+
+# Aufsummieren der Transaktionen
+
+```{r}
+sample_n(transactions, 5)
 ```
 
 
-in folgendem Abschnitt werden die buyers und korrespondierenden non-buyers auf auf issued - 13 bis issued - 1 Monate gefiltert und anschliessend gruppiert.
+Bei den Transaktionen ist jeweils die neue Balance und der Betrag der Transaktion angegebn. Das Problem dabei ist, dass alle Beträge positiv sind, auch wenn sie eigentlich abgezogen werden. 
+
+```{r}
+df <- transactions
+
+# Konvertieren Sie das 'date'-Feld in ein Datum
+df$date <- as.Date(df$date)
+
+# Sortieren Sie das Dataframe nach Nutzer und Datum
+df <- df[order(df$account_id, df$date), ]
+
+# Gruppieren Sie das Dataframe nach Nutzer
+df <- group_by(df, account_id)
+
+# Iterieren Sie über jeden Nutzer und bearbeiten Sie die Transaktionen
+df <- df %>% 
+  summarize(transactions = {
+    # Fügen Sie eine Spalte mit dem vorherigen Kontostand hinzu
+    prev_balance <- ifelse(row_number() == 1, NA, lag(balance, order_by = date))
+
+    # Berechnen Sie den Unterschied zwischen dem vorherigen Kontostand und dem aktuellen Kontostand
+    difference <- balance - prev_balance
+
+    # Fügen Sie eine Spalte mit der Transaktionsart hinzu
+    type <- "add"
+    type[difference < 0] <- "subtract"
+
+    # Erstellen Sie das Dataframe mit den Transaktionen für jeden Nutzer
+    transactions_df <- data.frame(amount, date, balance, prev_balance, difference, type)
+    transactions_df
+  }) %>%
+  ungroup()
+
+transactions <- unnest(df, transactions)
+
+# Hinzufügen des ersten amounts bei jedem Account
+transactions$difference <- ifelse(is.na(transactions$difference) & is.na(transactions$prev_balance) & (transactions$amount == transactions$balance), transactions$amount, transactions$difference)
+
+transactions$amount <- NULL
+
+transactions
+```
+
+## Zusammenfassen der Transaktionen für Card Buyers
+
+Um die Transaktions-Daten in unseren Modellen brauchen zu können, muss für jeden Kunde ein Rollup-Fenster erstellt werden. Dies fasst die Transaktionen der zwölf Monate vor dem Erhalt einer Kreditkarte zusammen (minus einen Monat Input Lag). Auf diesen Monaten werden die Transaktionen zusammengefasst.
+
+Als erstes werden die Transaktionen von Kunden herausgefiltert, welche eine Kreditkarte haben.
+
+```{r}
+account_ids <- card_buyers$account_id
+buyer_transactions <- transactions[transactions$account_id %in% account_ids,]
+```
+
+Das issued-Datum soll zu den Transaktionen hinzugefügt werden, damit diese für jeden Kunden einzeln gefiltert werden können.
+
+```{r}
+buyer_transactions <- merge(buyer_transactions, full[, c("account_id", "issued")], by="account_id")
+```
+
+Nun sollen Transaktionen so gefiltert werden, dass nur noch Transaktionen zwischen 13 Monaten und 1 Monat vor dem Issued Datum vorkommen.
+
+```{r}
+filtered_df <- buyer_transactions %>%
+  filter(date >= as.Date(paste0(format(issued - months(13), "%Y-%m"), "-01")) &
+         date <= as.Date(paste0(format(issued - months(1), "%Y-%m"), "-01")) - 1)
+```
+
+Auf diesen Daten wird eine Gruppierung anhand der account_id und des Monats gemacht werden. Die Werte in difference und balance werden zu verschiedenen Metriken zusammengefasst:
+Auf beiden Werten erfassen wir das Minimum, das Maximum, den Durchschnitt, den Median und die Standardabweichung. Bei der balance erfassen wir die erste und die letzte Balance des Monats und bei difference die Anzahl positive und negative differences.
+
+```{r}
+summary_df <- filtered_df %>%
+  group_by(account_id, month = format(date, "%Y-%m")) %>%
+  summarise(
+    max_difference = max(difference),
+    min_difference = min(difference),
+    max_balance = max(balance),
+    min_balance = min(balance),
+    initial_balance = first(balance),
+    end_balance = last(balance),
+    mean_balance = mean(balance),
+    median_balance = median(balance),
+    std_balance = sd(balance),
+    mean_difference = mean(difference),
+    median_difference = median(difference),
+    std_difference = sd(difference),
+    count_positive_difference = sum(difference > 0),
+    count_negative_difference = sum(difference < 0)
+  )
+summary_df <- summary_df %>%
+  arrange(account_id)
+summary_df
+```
+
+Jetzt haben wir für jede account_id eine Übersicht über die 12 Monate vor dem Kartenerhalt. Da es aber sein könnte, dass es Kunden gibt, welche nicht jeden Monat eine Transaktion hatten oder die Kreditkarte bereits im ersten Jahr erhalten haben, kontrollieren wir dies noch.
+
+```{r}
+# Kontrolle, ob für jeden account_id 12 monate vorhanden sind
+month_counts <- summary_df %>%
+  group_by(account_id) %>%
+  summarise(month_count = n_distinct(month))
+
+# Prüfe, ob jedes account_id 12 Monate hat
+month_counts <- month_counts %>% filter(month_count != 12)
+month_counts
+
+```
+162 Kunden haben also keine 12 kontinuierlichen Monate mit Transaktionen, bevor sie eine Karte bekommen. Wir filtern diese Kunden raus.
+
+```{r}
+summary_df <- subset(summary_df, !account_id %in% month_counts$account_id)
+```
+
+Als nächstes nummerieren wir die Monate pro account_id von 1 bis 12 durch, um danach weiter damit arbeiten zu können.
+
+```{r}
+# Sortieren nach account_id und Monat
+summary_df <- summary_df[order(summary_df$account_id, rev(summary_df$month)),]
+
+# Hinzufügen der Monatsnummer
+summary_df$group_id <- ave(seq_along(summary_df$account_id), summary_df$account_id, FUN = function(x) {x})
+summary_df$month_number <- 12
+
+for (i in 2:nrow(summary_df)) {
+  if (summary_df$account_id[i] != summary_df$account_id[i-1]) {
+    summary_df$month_number[i] <- 12
+  } else {
+    summary_df$month_number[i] <- summary_df$month_number[i-1] - 1
+  }
+}
+
+# Entferne die Spalte group_id
+summary_df$group_id <- NULL
+summary_df$month <- NULL
+```
+
+Nun möchten wir alle Informationen pro account_id auf einer Zeile haben. Dafür brauchen wir pivot_wider. So haben wir jede Kennzahl zwölf mal als Kolonne, jedes Mal mit der vorher erstellten Monatsnummer als Suffix.
+
+```{r}
+summary_df_buyers <- summary_df %>%
+  group_by(account_id) %>%
+  pivot_wider(names_from = month_number,
+              values_from = c(max_difference, min_difference, max_balance, min_balance, initial_balance, end_balance, mean_balance, median_balance, std_balance, median_balance, std_balance, mean_difference, median_difference, std_difference, count_positive_difference, count_negative_difference))
+
+summary_df_buyers <- merge(summary_df_buyers, card_buyers, by = "account_id")
+```
+
+```{r}
+summary_df_buyers
+```
+
+
+## Finden von ähnlichen Nutzern
+
+Zu jedem Kartenkäufer soll nun ein ähnlicher Nichtkäufer gefunden werden
+
+```{r}
+# Erstelle ein leeres DataFrame "similar_non_buyers"
+similar_non_buyers <- data.frame()
+
+# Iteriere über jeden Kunden im DataFrame "buyers"
+for (i in 1:nrow(card_buyers)) {
+  # Wähle den aktuellen Kunden aus dem DataFrame "buyers"
+  current_buyer <- card_buyers[i, ]
+  
+  # Wähle die Kunden aus dem DataFrame "non_buyers" aus, die das gleiche Geschlecht haben und möglichst gleich alt sind und möglichst in der gleichen Region wohnen
+  similar_non_buyers_temp <- non_buyers %>%
+    filter(gender == current_buyer$gender,
+           abs(age - current_buyer$age) <= 5,
+           region == current_buyer$region)
+  
+  # Wähle den am besten passenden Kunden aus "similar_non_buyers_temp" aus
+  best_match_index <- which.min(abs(similar_non_buyers_temp$age - current_buyer$age))
+  best_match <- similar_non_buyers_temp[best_match_index, ]
+  best_match$issued <- current_buyer$issued
+  
+  # damit nicht der gleiche non_buyer doppelt verwendet wird
+  non_buyers <- non_buyers %>% filter(client_id != best_match$client_id)
+  
+  
+  similar_non_buyers <- rbind(similar_non_buyers, best_match)
+  
+}
+```
+
+
+## Zusammenfassen der Transaktionen für non buyers
+
+Auch hier sollen die Transaktionen gleich wie bei den Käufern zusammengefasst werden.
+
+```{r}
+account_ids <- similar_non_buyers$account_id
+non_buyer_transactions <- transactions[transactions$account_id %in% account_ids,]
+
+non_buyer_transactions <- merge(non_buyer_transactions, similar_non_buyers[, c("account_id", "issued")], by="account_id")
+
+```
+```{r}
+filtered_df <- non_buyer_transactions %>%
+  filter(date >= as.Date(paste0(format(issued - months(13), "%Y-%m"), "-01")) &
+         date <= as.Date(paste0(format(issued - months(1), "%Y-%m"), "-01")) - 1)
+```
+```{r}
+summary_df <- filtered_df %>%
+  group_by(account_id, month = format(date, "%Y-%m")) %>%
+  summarise(
+    max_difference = max(difference),
+    min_difference = min(difference),
+    max_balance = max(balance),
+    min_balance = min(balance),
+    initial_balance = first(balance),
+    end_balance = last(balance),
+    mean_balance = mean(balance),
+    median_balance = median(balance),
+    std_balance = sd(balance),
+    mean_difference = mean(difference),
+    median_difference = median(difference),
+    std_difference = sd(difference),
+    count_positive_difference = sum(difference > 0),
+    count_negative_difference = sum(difference < 0)
+  )
+summary_df <- summary_df %>%
+  arrange(account_id)
+```
+
+```{r}
+# Kontrolle, ob für jeden account_id 12 monate vorhanden sind
+month_counts <- summary_df %>%
+  group_by(account_id) %>%
+  summarise(month_count = n_distinct(month))
+
+# Prüfe, ob jedes account_id 12 Monate hat
+month_counts <- month_counts %>% filter(month_count != 12)
+month_counts
+
+```
+Auch hier haben wieder einige Kunden weniger als 12 kontinuierliche Monate.
+
+```{r}
+summary_df <- subset(summary_df, !account_id %in% month_counts$account_id)
+```
+
+
+```{r}
+summary_df <- summary_df[order(summary_df$account_id, rev(summary_df$month)),]
+summary_df$group_id <- ave(seq_along(summary_df$account_id), summary_df$account_id, FUN = function(x) {x})
+
+summary_df$month_number <- 12
+
+for (i in 2:nrow(summary_df)) {
+  if (summary_df$account_id[i] != summary_df$account_id[i-1]) {
+    summary_df$month_number[i] <- 12
+  } else {
+    summary_df$month_number[i] <- summary_df$month_number[i-1] - 1
+  }
+}
+
+# Entferne die Spalte group_id
+summary_df$group_id <- NULL
+summary_df$month <- NULL
+```
+
+```{r}
+summary_df_non_buyers <- summary_df %>%
+  group_by(account_id) %>%
+  pivot_wider(names_from = month_number,
+              values_from = c(max_difference, min_difference, max_balance, min_balance, initial_balance, end_balance, mean_balance, median_balance, std_balance, median_balance, std_balance, mean_difference, median_difference, std_difference, count_positive_difference, count_negative_difference))
+```
+
+Die Transaktionsdaten werden mit den anderen Daten zusammengefügt, um pro Kunde eine Zeile in einem Dataframe zu haben.
 
 ```{r}
 
-window <- left_join(trans, card_buyers[ , c("client_id", "account_id", "issued")], by='account_id')
-
-# get all transaction withing 12 month prior to credit card issuance
-window <- window %>% group_by(client_id) %>% filter(date %m+% months(13) > issued & date %m+% months(1) < issued) %>% ungroup()
-
-window <- group_by(month = lubridate::floor_date(window$issued, 'month')) %>% summarize(sum = sum(value_column))
-
+summary_df_non_buyers <- merge(summary_df_non_buyers, similar_non_buyers, by = "account_id")
 ```
 
+```{r}
+merge(summary_df_non_buyers, non_buyers, by = "account_id")
+```
 
 
 ```{r}
-window
+final_df <- rbind(summary_df_buyers, summary_df_non_buyers)
 ```
 
-
----
-Spielwiese
-
-
-
-In diesem Abschnitt werden alle Transaktionen bis 12 Monate vor dem Kreditkartenkauf herausgefiltert.
+Jetzt muss noch dass issued-Datum sowie weitere Variabeln entfernt werden.
 
 ```{r}
+# Entferne weitere unnötige Variabeln wie ID's oder Werte, welche überall gleich sind
+final_df <- final_df %>% select(-client_id, -district_id, -district_id.accounts, -disp_id, -type, -loan_id)
 
-window <- left_join(trans, client_analytical_record[ , c("client_id", "account_id", "issued")], by='account_id')
-
-# get all transaction withing 12 month prior to credit card issuance
-window <- window %>% group_by(client_id) %>% filter(date %m+% months(12) > issued & date < issued) %>% ungroup()
-
-# mark all transactions within 1 month prior to card issuance as lag
-window <- window %>% mutate(lag = ifelse(date %m+% months(1) > issued, 1, 0))
-
-window 
 ```
 
+## Train-Test-Split
 
+Als Vorbereitung für die Modelle müssen wir unsere Daten zu Trainings- und Testdaten unterteilen. Wir nehmen 80% als Trainingsdaten
+
+```{r}
+set.seed(123)
+split <- createDataPartition(final_df$has_card, p = 0.8, list = FALSE)
+train <- final_df[split, ]
+test <- final_df[-split, ]
+```
 
 
 
