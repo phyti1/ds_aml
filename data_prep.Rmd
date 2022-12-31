@@ -647,7 +647,7 @@ Jetzt muss noch dass issued-Datum sowie weitere Variabeln entfernt werden.
 
 ```{r}
 # Entferne weitere unnötige Variabeln wie ID's oder Werte, welche überall gleich sind
-final_df <- final_df %>% select(-client_id, -district_id, -district_id.accounts, -disp_id, -type, -loan_id)
+final_df <- final_df %>% select(-client_id, -district_id, -district_id.accounts, -disp_id, -type, -loan_id, -account_id)
 
 ```
 
@@ -656,11 +656,246 @@ final_df <- final_df %>% select(-client_id, -district_id, -district_id.accounts,
 Als Vorbereitung für die Modelle müssen wir unsere Daten zu Trainings- und Testdaten unterteilen. Wir nehmen 80% als Trainingsdaten
 
 ```{r}
-set.seed(123)
-split <- createDataPartition(final_df$has_card, p = 0.8, list = FALSE)
-train <- final_df[split, ]
-test <- final_df[-split, ]
+split_data <- function(df, test_size = 0.2) {
+  set.seed(27)
+  split <- createDataPartition(df$has_card, p = 1 - test_size, list = FALSE)
+  train <- df[split, ]
+  test <- df[-split, ]
+  
+  return(list(train = train, test = test))
+}
+```
+
+# Baseline Modell
+
+Als erstes soll eine logistische Regression mit den Informationen Alter, Geschlecht, Domizilregion, Vermögen (balance-Schnitt über alle Monate) und Umsatz (difference-Schnitt über alle Monate) als Baseline Modell erstellt werden.
+
+```{r}
+baseline_data <- final_df
+baseline_data$mean_balance <- rowMeans(final_df[, c("mean_balance_1", "mean_balance_2", "mean_balance_3", "mean_balance_4", 
+                                                "mean_balance_5", "mean_balance_6", "mean_balance_7", "mean_balance_8", 
+                                                "mean_balance_9", "mean_balance_10", "mean_balance_11", "mean_balance_12")])
+baseline_data$mean_difference <- rowMeans(final_df[, c("mean_difference_1", "mean_difference_2", "mean_difference_3", "mean_difference_4", 
+                                                  "mean_difference_5", "mean_difference_6", "mean_difference_7", "mean_difference_8", 
+                                                  "mean_difference_9", "mean_difference_10", "mean_difference_11", "mean_difference_12")])
+baseline_data <- baseline_data[, c("age", "gender", "region", "has_card", "mean_balance", "mean_difference")]
+baseline_data$has_card <- as.factor(baseline_data$has_card)
+```
+
+Mache den Train-Test-Split auf diesen Daten
+ 
+```{r}
+splits <- split_data(baseline_data, test_size = 0.2)
+train <- splits$train
+test <- splits$test
+```
+
+Trainiere ein Regressionsmodell auf den Trainingsdaten und berechne die Predictions auf den Testdaten
+
+```{r}
+# Fit the model on the training data
+model <- glm(has_card ~ ., data = train, family = binomial)
+
+# Make predictions on the test data
+predictions <- predict(model, test, type = "response")
+```
+Um die Modelle vergleichen zu können, rechnen wir hier die accuracy aus.
+
+```{r}
+threshold <- 0.5
+predictions_01 <- ifelse(predictions > threshold, 1, 0)
+
+accuracy <- mean(test$has_card == predictions_01)
+
+# Print the result
+print(paste("Accuracy:", accuracy))
+```
+
+# Regressionsmodell mit allen Daten (funktioniert noch nicht)
+
+```{r}
+final_df$district_name <- NULL
+final_df$district_name.accounts <- NULL
+```
+
+```{r}
+final_df$unemployment_rate_95 <- as.numeric(final_df$unemployment_rate_95)
+final_df$unemployment_rate_95.accounts <- as.numeric(final_df$unemployment_rate_95.accounts)
+final_df$crimes_95 <- as.numeric(final_df$crimes_95)
+final_df$crimes_95.accounts <- as.numeric(final_df$crimes_95.accounts)
+```
+```{r}
+final_df <- final_df %>% select(-date.loans, -amount, -duration, -payments, -status, -issued, -inhabitants, -municipalities_inhabitants_smaller_499, -municipalities_inhabitants_500_to_1999, -municipalities_inhabitants_2000_to_9999, -municipalities_inhabitants_larger_10000, -cities, -urban_inhabitants_ratio)
 ```
 
 
+```{r}
+splits <- split_data(final_df, test_size = 0.2)
+train <- splits$train
+test <- splits$test
+```
+
+```{r}
+# Fit the model on the training data
+model <- glm(has_card ~ ., data = train, family = binomial)
+
+# Make predictions on the test data
+predictions <- predict(model, test, type = "response")
+
+# Calculate the ROC AUC value
+roc_auc <- auc(test$has_card, predictions)
+
+# Print the result
+print(paste("ROC AUC:", roc_auc))
+
+f1 <- f1(test$has_card, predictions)
+
+# Print the result
+print(paste("F1 score:", f1))
+
+precision <- precision(test$has_card, predictions)
+
+# Calculate the recall
+recall <- recall(test$has_card, predictions)
+
+# Print the results
+print(paste("Precision:", precision))
+print(paste("Recall:", recall))
+
+threshold <- 0.5
+predictions_01 <- ifelse(predictions > threshold, 1, 0)
+predictions_01 <- ifelse(is.na(predictions_01), 0, predictions_01)
+accuracy <- mean(test$has_card == predictions_01)
+
+# Print the result
+print(paste("Accuracy:", accuracy))
+```
+
+```{r}
+sum(is.na(final_df))
+final_df_without_na <- na.omit(final_df)
+final_df_without_na$has_card <- as.factor(final_df_without_na$has_card)
+
+splits <- split_data(final_df_without_na, test_size = 0.2)
+train <- splits$train
+test <- splits$test
+```
+
+
+```{r}
+
+model <- train(has_card ~ ., data = train, method = "glm", trControl = trainControl(method = "cv"))
+
+# View the selected features
+model$finalModel$variables
+```
+
+
+# Decision Tree mit den vorher verwendeten Daten
+
+```{r}
+set.seed(123)
+splits <- split_data(final_df, test_size = 0.2)
+train <- splits$train
+test <- splits$test
+model <- rpart(has_card ~ ., data = train, method = "class")
+
+# Make predictions on the test data
+predictions <- predict(model, test, type = "class")
+
+predictions <- as.factor(predictions)
+
+
+test$has_card <- as.factor(test$has_card)
+# Calculate the confusion matrix
+confusion_matrix <- confusionMatrix(predictions, test$has_card)
+
+# Calculate the accuracy
+accuracy <- confusion_matrix$overall[1]
+
+# Print the results
+print(paste("Accuracy:", accuracy))
+```
+
+
+
+
+# Random Forest 
+
+```{r}
+set.seed(123)
+final_df$has_card <- as.factor(final_df$has_card)
+final_df <- na.omit(final_df)
+# Teilen Sie den Datensatz in Trainings- und Testdaten auf
+train_index <- createDataPartition(final_df$has_card, p = 0.8, list = FALSE)
+train <- final_df[train_index, ]
+test <- final_df[-train_index, ]
+
+# Erstellen Sie ein Random Forest-Modell
+model <- rand_forest() %>% set_mode("classification")
+
+# Trainieren Sie das Modell mit bootstrapped resampling
+model <- model %>% fit(has_card ~ ., data = train)
+
+# Machen Sie Vorhersagen auf den Testdaten
+predictions <- model %>% predict(test)
+
+test$has_card <- as.factor(test$has_card)
+# Berechnen Sie die Genauigkeit des Modells
+confusion_matrix <- confusionMatrix(predictions$.pred_class, test$has_card)
+
+# Ausgeben der Genauigkeit
+print(paste("Accuracy:", confusion_matrix$overall[1]))
+```
+
+# Hyperparamter Optimierung auf Random Forest
+
+```{r}
+# Legen Sie den Hyperparameter-Suchbereich fest
+param_grid <- expand.grid(ntree = c(50, 100, 150),
+                          nodesize = c(5, 10, 15))
+
+mtry_values <- c(1, 2, 3)
+splitrule_values <- c("gini", "extratrees")
+min.node.size_values <- c(10, 20, 30)
+
+# Erstellen Sie den Tuning-Parameter-Grid mit expand.grid
+param_grid <- expand.grid(mtry = c(1, 5, 10), 
+                         splitrule = c("gini", "extratrees"), 
+                         min.node.size = c(5, 10, 15))
+
+# Definieren Sie das Trainingskontrollobjekt
+train_control <- trainControl(method = "cv", number = 5)
+
+# Führen Sie die Grid Search durch
+model <- train(has_card ~ ., data = train, method = "ranger",
+               trControl = train_control, tuneGrid = param_grid)
+
+# Machen Sie Vorhersagen auf den Testdaten
+predictions <- predict(model, test)
+
+# Erstellen Sie eine Confusion Matrix
+confusion_matrix <- confusionMatrix(predictions, test$has_card)
+
+# Ausgeben der Genauigkeit
+print(paste("Accuracy:", confusion_matrix$overall[1]))
+```
+
+```{r}
+train
+```
+
+
+# Recursive Feature Elimnation
+
+```{r}
+# define the feature selection algorithm
+fs <- rfe(x = train[,-1], y = train[,1], sizes = c(1:ncol(train)-1), rfeControl = rfeControl(functions = rfFuncs))
+
+# print the selected features
+print(fs$selectedFeatures)
+
+# train a model using the selected features
+model <- train(x = train[,fs$selectedFeatures], y = train[,1], method = "rf")
+```
 
