@@ -24,7 +24,7 @@ R-Version: **[Default] [64-bit] C:\\Program Files\\R\\R-4.1.0**
 rm(list = ls())
 
 # nötige Packete
-packages <- c("tidyverse", "data.table", "tidymodels", "lubridate")
+packages <- c("tidyverse", "data.table", "tidymodels", "lubridate", "caret")
 
 # Noch nicht installierte Pakete installieren
 installed_packages <- packages %in% rownames(installed.packages())
@@ -647,17 +647,38 @@ Jetzt muss noch dass issued-Datum sowie weitere Variabeln entfernt werden.
 
 ```{r}
 # Entferne weitere unnötige Variabeln wie ID's oder Werte, welche überall gleich sind
-final_df <- final_df %>% select(-client_id, -district_id, -district_id.accounts, -disp_id, -type, -loan_id, -account_id)
-
+final_df <- final_df %>% select(-client_id, -district_id, -district_id.accounts, -disp_id, -type, -loan_id, -account_id, -issued)
 ```
 
-## Train-Test-Split
+Ausserdem scheinen einige Variabeln als Faktoren im Datensatz zu sein, welche eigentlich numerisch wären.
 
-Als Vorbereitung für die Modelle müssen wir unsere Daten zu Trainings- und Testdaten unterteilen. Wir nehmen 80% als Trainingsdaten
+```{r}
+final_df$unemployment_rate_95 <- as.numeric(final_df$unemployment_rate_95)
+final_df$unemployment_rate_95.accounts <- as.numeric(final_df$unemployment_rate_95.accounts)
+final_df$crimes_95 <- as.numeric(final_df$crimes_95)
+final_df$crimes_95.accounts <- as.numeric(final_df$crimes_95.accounts)
+```
+
+
+# Modelle
+
+Als nächstes sollen Modelle trainiert und evaluiert werden. Um die Resultate zu reproduzieren, wird hier ein initialier seed gesetzt.
+
+```{r}
+set.seed(27)
+```
+
+
+
+
+## Funktionen zur Evaluierung von Modellen
+
+### Train-Test-Split
+
+Als Vorbereitung für die Modelle müssen wir unsere Daten zu Trainings- und Testdaten unterteilen. Dafür erstellen wir eine Funktion, welche auf verschiedenen Varianten des Datensatz gebraucht werden kann.
 
 ```{r}
 split_data <- function(df, test_size = 0.2) {
-  set.seed(27)
   split <- createDataPartition(df$has_card, p = 1 - test_size, list = FALSE)
   train <- df[split, ]
   test <- df[-split, ]
@@ -666,9 +687,152 @@ split_data <- function(df, test_size = 0.2) {
 }
 ```
 
+### Metriken
+
+Damit wir die verschiedenen Modelle besser evaluieren können, müssen wir die gleichen Kennzahlen und Auswertungen pro Modell machen. Zu diesem Zweck definieren wir einige Funktionen, damit wir weniger redundanten Code haben und unsere Ergebnisse in einem einheitliche, vergleichbaren Format daherkommen. 
+
+Dafür erstellen wir eine Funktion, die die Genauigkeit (Accuracy), Cohen's Kappa, Matthews Korrelation, Präzision (Precision), Erinnerung (Recall) und den F1-Score für eine Reihe von Vorhersagen und deren entsprechenden wahren Werte berechnet.
+
+Was bedeuten diese Kennzahlen genau?
+
+Accuracy (Genauigkeit): Die Accuracy ist der Prozentsatz der Vorhersagen, die mit den tatsächlichen Werten übereinstimmen. Sie wird berechnet als Anzahl der korrekten Vorhersagen geteilt durch die Gesamtzahl der Vorhersagen.
+
+Cohen's Kappa (Cohen's Kappa): Cohen's Kappa ist eine Messgröße für die Qualität von binären Klassifikationen. Es wird verwendet, um die Übereinstimmung zwischen zwei Klassifikatoren zu messen, indem es die Übereinstimmung über der erwarteten Übereinstimmung durch Zufall berechnet. Ein Kappa-Wert von 1 bedeutet perfekte Übereinstimmung, ein Wert von 0 bedeutet keine Übereinstimmung, die besser ist als Zufall, und ein Wert von -1 bedeutet komplett falsche Klassifikationen.
+
+Matthews correlation coefficient (Matthews Korrelation): Der Matthews Korrelation Coefficient (MCC) ist eine Messgröße für die Qualität von binären Klassifikationen. Er reicht von -1 bis 1, wobei ein Wert von 1 perfekte Klassifikation bedeutet, ein Wert von 0 eine Klassifikation, die nicht besser als Zufall ist, und ein Wert von -1 eine komplett falsche Klassifikation bedeutet.
+
+Precision (Präzision): Die Präzision ist der Prozentsatz der Vorhersagen, die tatsächlich korrekt waren, unter der Annahme, dass alle Vorhersagen korrekt sind. Sie wird berechnet als Anzahl der korrekten Vorhersagen für die positive Klasse geteilt durch die Gesamtzahl der Vorhersagen für die positive Klasse.
+
+Recall (Erinnerung): Der Recall ist der Prozentsatz der tatsächlich positiven Werte, die korrekt vorhergesagt wurden. Er wird berechnet als Anzahl der korrekten Vorhersagen für die positive Klasse geteilt durch die Gesamtzahl der tatsächlich positiven Werte.
+
+F1 score (F1-Wert): Der F1-Wert ist ein Maß für die Qualität von binären Klassifikationen, das die Harmoniesche Mischung von Präzision und Recall darstellt. Es wird berechnet als der Harmoniesche Mittelwert von Präzision und Recall. Ein hoher F1-Wert bedeutet, dass sowohl Präzision als auch Recall hoch sind.
+
+```{r}
+get_metrics <- function(predictions, true_values) {
+  # Calculate accuracy
+  accuracy <- sum(predictions == true_values) / length(predictions)
+  
+  # Calculate Cohen's kappa
+  n <- length(predictions)
+observed_agreement <- sum(predictions == true_values)
+expected_agreement <- sum(predictions == true_values) / n
+kappa <- (observed_agreement - expected_agreement) / (n - expected_agreement)
+  
+  # Calculate Matthews correlation coefficient
+  confusion_matrix <- table(predictions, true_values)
+  tp <- confusion_matrix[2,2]
+  tn <- confusion_matrix[1,1]
+  fp <- confusion_matrix[2,1]
+  fn <- confusion_matrix[1,2]
+  matthews <- (tp * tn - fp * fn) / sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+  
+  # Calculate precision and recall
+  precision <- confusion_matrix[2,2] / sum(confusion_matrix[2,])
+  recall <- confusion_matrix[2,2] / sum(confusion_matrix[,2])
+  
+  # Calculate F1 score
+  f1 <- 2 * (precision * recall) / (precision + recall)
+  
+  # Create a data frame of the metrics
+  metrics <- data.frame(accuracy = accuracy, kappa = kappa, matthews = matthews,
+                        precision = precision, recall = recall, f1 = f1)
+  
+  # Return the data frame
+  return(metrics)
+}
+```
+
+### Konfusionsmatrix mit Plot
+
+Diese Funktion erstellt eine Konfusionsmatrix und gibt sie als Plot zurück. 
+
+Eine Konfusionsmatrix ist ein wichtiges Werkzeug zur Evaluation von Klassifikationsmodellen. Sie zeigt an, wie gut das Modell in der Lage ist, die verschiedenen Klassen richtig zu identifizieren. In einer Konfusionsmatrix werden die tatsächlichen und die von dem Modell vorhergesagten Klassen gegenübergestellt. Die Matrix ist in vier Quadranten unterteilt: true positives (TP), true negatives (TN), false positives (FP) und false negatives (FN). TP sind die Fälle, in denen das Modell die Klasse richtig vorhergesagt hat, TN sind die Fälle, in denen das Modell die Klasse richtig vorhergesagt hat und diese Klasse auch tatsächlich vorliegt, FP sind die Fälle, in denen das Modell eine Klasse vorhergesagt hat, die in Wirklichkeit nicht vorliegt, und FN sind die Fälle, in denen das Modell eine Klasse nicht vorhergesagt hat, die in Wirklichkeit vorliegt. Eine Konfusionsmatrix ist hilfreich, um die Genauigkeit, Sensitivität und Spezifität des Modells zu berechnen und um zu sehen, an welchen Stellen das Modell Schwächen hat. Sie kann auch verwendet werden, um die Leistung von verschiedenen Modellen miteinander zu vergleichen.
+
+```{r}
+plot_confusion_matrix <- function(predictions, true_values) {
+  # Erstelle eine Confusion Matrix als Data Frame
+  confusion_matrix_df <- data.frame(predictions, true_values)
+  
+  # Zähle die Häufigkeiten jeder Kombination von Vorhersage- und True-Werten
+  counts_df <- count(confusion_matrix_df, predictions, true_values)
+  
+  # Erstelle einen ggplot-Plot
+  ggplot(data = counts_df, aes(x = predictions, y = true_values)) +
+    geom_tile(aes(fill = n)) +
+    geom_text(aes(label = n)) +
+    scale_fill_gradient(low = "white", high = "darkgreen") +
+    labs(x = "Predicted Class", y = "True Class", title = "Confusion Matrix")
+}
+```
+
+### ROC / AUC
+
+Diese Funktion zeichnet die ROC-Kurve und berechnet die Area und Curve. 
+
+Die ROC-Kurve (Receiver Operating Characteristic curve) ist ein wichtiges Werkzeug zur Bewertung von Klassifikatoren. Sie zeigt die Leistung des Klassifikators bei verschiedenen Schwellenwerten an, die zur Unterscheidung zwischen zwei Klassen verwendet werden. Die ROC-Kurve ist besonders nützlich, wenn die beiden Klassen im Verhältnis unausgeglichen sind, wie es oft der Fall ist, wenn es darum geht, seltene Ereignisse wie Krankheiten oder Betrug zu erkennen.
+
+Die ROC-Kurve ist auf der x-Achse der falsch-positiv-Rate (FPR) und auf der y-Achse der wahr-positiv-Rate (TPR) aufgetragen. Der FPR gibt an, wie viele falsch positive Ergebnisse es gibt, während der TPR angibt, wie viele wahr positive Ergebnisse erzielt werden. Ein perfekter Klassifikator würde eine ROC-Kurve haben, die im oberen linken Bereich beginnt und nach rechts oben verläuft, wobei alle Fälle korrekt klassifiziert werden. Ein zufälliger Klassifikator würde eine diagonal verlaufende ROC-Kurve haben, da die FPR und TPR zufällig verteilt sind.
+
+Die AuC (Area Under the Curve) ist eine Metrik, die aus der ROC-Kurve berechnet wird und die Leistung des Klassifikators zusammenfasst. Sie gibt an, wie gut der Klassifikator im Vergleich zu einem zufälligen Klassifikator ist. Eine AUC von 1 bedeutet, dass das Modell perfekt in der Lage ist, positive und negative Klassen zu unterscheiden, während eine AUC von 0.5 bedeutet, dass das Modell keine bessere Leistung als Zufall erzielt. Die AUC kann Werte zwischen 0 und 1 annehmen. Eine AUC von 0 bedeutet, dass das Modell völlig inkorrekt ist. Im Allgemeinen gilt, je größer die AUC, desto besser ist das Modell im Vergleich zu anderen Modellen.
+
+```{r}
+make_roc_plot_and_get_auc <- function(predictions, true_values){
+
+roc_curve <- roc(as.numeric(predictions), as.numeric(true_values) - 1)
+
+plot(roc_curve, xlab = "False Positive Rate", ylab = "True Positive Rate", main ="ROC Curve")
+
+auc <- auc(roc_curve)
+
+return(auc)
+}
+```
+
+
+### Feature Importance
+
+Um die Feature Importance genauer zu untersuchen, definieren wir eine Funktion, welche für ein Modell die Feature Importance berechnet und die Top 10 Features in einem Barplot ausgibt.Die Funktion plot_feature_importance() nimmt als Eingabeparameter ein maschinelles Lernmodell und plottet die Feature-Importance des Modells als Barplot. Die Funktion unterscheidet drei Arten von Modellen: Logistische Regressionen, Entscheidungsbäume und Random Forest. Für jede Art von Modell wird die Feature-Importance auf eine spezifische Art und Weise berechnet. Anschließend werden die Feature-Importance-Werte und die Namen der Features absteigend sortiert, wobei nur die 10 wichtigsten Features berücksichtigt werden. Der Barplot zeigt dann die Feature-Importance-Werte für die entsprechenden Features an. Der Titel des Plots lautet "Feature Importance" und die y-Achse ist mit "Importance" beschriftet. Die Namen der Features werden rotiert angezeigt, um Platz zu sparen, und die Farben der einzelnen Features sind unterschiedlich.
+
+```{r}
+plot_feature_importance <- function(model) {
+  
+  # Logistische Regression
+  if (class(model)[1] == "glm") {
+    importance <- abs(coef(model)[-1])
+    names <- names(importance)
+  } 
+  
+  # Decision Tree
+  else if (class(model)[1] == "rpart") {
+    importance <- model$importance
+    names <- row.names(importance)
+  } 
+  
+  # Random Forest
+  else if (class(model)[1] == "randomForest") {
+    importance <- model$importance
+    names <- row.names(importance)
+  } 
+  
+  # Unrecognized model
+  else {
+    stop("Unrecognized model")
+  }
+  
+  # Sort feature importance and names in decreasing order
+  importance <- head(importance[order(importance, decreasing = TRUE)], 10)
+  names <- names[order(importance, decreasing = TRUE)]
+  
+  # Plot feature importance
+  barplot(importance, names.arg = names, las = 2, cex.names = 0.6,
+          main = "Feature Importance", xlab = "", ylab = "Importance")
+}
+```
+
+
 # Baseline Modell
 
-Als erstes soll eine logistische Regression mit den Informationen Alter, Geschlecht, Domizilregion, Vermögen (balance-Schnitt über alle Monate) und Umsatz (difference-Schnitt über alle Monate) als Baseline Modell erstellt werden.
+Als erstes soll eine logistische Regression mit den Informationen Alter, Geschlecht, Domizilregion, Vermögen (balance-Schnitt über alle Monate) und Umsatz (difference-Schnitt über alle Monate) als Baseline Modell erstellt werden.Dafür müssen wir kurz ein neues Dataframe erstellen.
 
 ```{r}
 baseline_data <- final_df
@@ -682,7 +846,7 @@ baseline_data <- baseline_data[, c("age", "gender", "region", "has_card", "mean_
 baseline_data$has_card <- as.factor(baseline_data$has_card)
 ```
 
-Mache den Train-Test-Split auf diesen Daten
+Darauf wird ein Train-Test-Split mit 80% Trainingsdaten und 20% Testdaten gebraucht.
  
 ```{r}
 splits <- split_data(baseline_data, test_size = 0.2)
@@ -690,47 +854,159 @@ train <- splits$train
 test <- splits$test
 ```
 
-Trainiere ein Regressionsmodell auf den Trainingsdaten und berechne die Predictions auf den Testdaten
+Das Regressionsmodell wird auf den Trainingsdaten trainiert.
 
 ```{r}
 # Fit the model on the training data
 model <- glm(has_card ~ ., data = train, family = binomial)
+```
 
+Als nächstes sollen die Predictions gemacht und damit die Metriken erstellt werden. Da die logistische Regression eine Zahl zwischen 0 und 1 zurückgibt, müssen wir anhand eines Thresholds die Werte zu TRUE und FALSE umwandeln. Der Threshold gibt an, ab welchem Wahrscheinlichkeitswert eine Vorhersage als positiv betrachtet wird. Standardmäßig ist der Threshold auf 0.5 gesetzt, was bedeutet, dass alle Wahrscheinlichkeiten größer als 0.5 als positiv und alle Wahrscheinlichkeiten kleiner als 0.5 als negativ betrachtet werden.
+
+```{r}
 # Make predictions on the test data
 predictions <- predict(model, test, type = "response")
-```
-Um die Modelle vergleichen zu können, rechnen wir hier die accuracy aus.
 
-```{r}
 threshold <- 0.5
-predictions_01 <- ifelse(predictions > threshold, 1, 0)
+predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
 
-accuracy <- mean(test$has_card == predictions_01)
 
-# Print the result
-print(paste("Accuracy:", accuracy))
-```
-
-# Regressionsmodell mit allen Daten (funktioniert noch nicht)
-
-```{r}
-final_df$district_name <- NULL
-final_df$district_name.accounts <- NULL
+get_metrics(predictions_threshold, test$has_card)
 ```
 
 ```{r}
-final_df$unemployment_rate_95 <- as.numeric(final_df$unemployment_rate_95)
-final_df$unemployment_rate_95.accounts <- as.numeric(final_df$unemployment_rate_95.accounts)
-final_df$crimes_95 <- as.numeric(final_df$crimes_95)
-final_df$crimes_95.accounts <- as.numeric(final_df$crimes_95.accounts)
+plot_confusion_matrix(predictions_threshold, test$has_card)
 ```
+
 ```{r}
-final_df <- final_df %>% select(-date.loans, -amount, -duration, -payments, -status, -issued, -inhabitants, -municipalities_inhabitants_smaller_499, -municipalities_inhabitants_500_to_1999, -municipalities_inhabitants_2000_to_9999, -municipalities_inhabitants_larger_10000, -cities, -urban_inhabitants_ratio)
+make_roc_plot_and_get_auc(predictions_threshold, test$has_card)
+```
+
+```{r}
+plot_feature_importance(model)
+```
+
+
+## Threshold 
+
+Der Threshold-Wert könnte aber angepasst werden. Je nach Veränderung werden die verschiedenen Metriken besser oder schlechter. Die Frage dabei ist, ob wir eher mehr falsche Positivvorhersagen oder Negativvorhersagen wollen. Wenn wir den Threshold senken, wird bspw. der Recall höher. Wenn wir den Threshold erhöhen, wird die Precision höher. Es ist aber nicht sinnvoll, anhand des Thresholds diese beiden Metriken zu maximieren, da es bei beiden fast keine Positiven bzw. Negative Predictions mehr gibt. 
+
+Der F1 ist eine Zusammenfassung der Precision und der Recall. Wir untersuchen, mit welchem Threshold der höchste F1-Score erzielt werden kann.
+
+```{r}
+best_threshold <- 0
+best_f1 <- 0
+thresholds <- seq(0.01, 0.99, 0.01)
+f1_scores <- rep(0, length(thresholds))
+
+for (i in 1:length(thresholds)) {
+  # Set the threshold for the predictions
+  predictions_threshold <- ifelse(predictions > thresholds[i], TRUE, FALSE)
+  
+  if (all(predictions_threshold)) {
+  next
+} else if (all(!predictions_threshold)) {
+  next
+}
+  
+  # Calculate the f1
+  f1 <- get_metrics(predictions_threshold, test$has_card)$f1
+  
+  f1_scores[i] <- f1
+  
+  # Update the best threshold and best f1 if necessary
+  if (f1 > best_f1) {
+    best_threshold <- thresholds[i]
+    best_f1 <- f1
+  }
+}
+
+# Display the best threshold and best recall
+print(paste("Best threshold:", best_threshold))
+print(paste("Best F1:", best_f1))
+
+plot(thresholds, f1_scores, type = "l", xlab = "Threshold", ylab = "F1 Score", main = "F1 Score with different thresholds")
+```
+Wie sehen die anderen Metriken mit diesem Threshold aus?
+
+```{r}
+predictions_threshold <- ifelse(predictions > best_threshold, TRUE, FALSE)
+get_metrics(predictions_threshold, test$has_card)
+```
+
+
+# Regressionsmodell mit allen Daten
+
+Nun soll dieses Baseline-Modell verbessert werden. Als erstes probieren wir, das gleiche Modell (Logistische Regression) mit mehr Input-Parametern zu trainieren. 
+
+Da die logistische Regression Probleme mit Faktoren hat, welche nur im Trainings- bzw. Testdatensatz vorkommen und auch nicht gut mit NA's umgehen kann, müssen wir zuerst noch einige Anpassungen am Datensatz vornehmen.
+
+Als erstes entfernen wir alle Kolonnen, welche Faktoren sind und mehr als 10 verschiedene Ausprägungen haben.
+
+```{r}
+# Ermittle die numerischen Merkmale in den Trainingsdaten
+numeric_vars <- sapply(final_df, is.numeric)
+
+# Erstelle ein Subset der Trainingsdaten ohne die numerischen Merkmale
+train_no_numeric <- final_df[, !numeric_vars]
+
+# Ermittle die Anzahl der Kategorien für jedes Merkmal
+num_categories <- sapply(train_no_numeric, function(x) length(unique(x)))
+
+# Überprüfe, ob ein Merkmal zu viele Kategorien hat
+too_many_categories <- num_categories > 10
+
+# Gib die Namen der Merkmale aus, die zu viele Kategorien haben
+columns_to_remove <- colnames(train_no_numeric)[too_many_categories]
+
+
+# Ermittle die Spaltennamen, die behalten werden sollen
+keep_columns <- setdiff(colnames(final_df), columns_to_remove)
+
+# Erstelle ein Subset des Dataframes mit den behaltenen Spaltennamen
+final_df_simplified <- final_df[, keep_columns]
+
+columns_to_remove
+```
+
+Nun muss der Datensatz noch auf NA's überprüft werden.
+
+```{r}
+sum(is.na(final_df_simplified))
+
+# Erstelle einen logischen Vektor, der angibt, ob jedes Element NA ist
+na_matrix <- is.na(final_df_simplified)
+
+# Summiere die Anzahl der NA- Werte pro Zeile
+na_counts <- rowSums(na_matrix)
+na_counts_cols <- colSums((na_matrix))
+
+# Zähle die Zeilen mit NA- Werten
+num_na_rows <- sum(na_counts > 0)
+num_na_cols <- sum(na_counts_cols > 0)
+num_na_rows
+num_na_cols
+```
+
+Fast jede Zeile hat irgendwo ein NA. Es sind auch viele Kolonnen betroffen. Wir können also nicht alle Observationen oder Variabeln mit NA's entfernen, da sonst der Datenverlust sehr gross wäre. Daher imputieren wir die numerischen fehlenden Werte mit dem Median und die fehlenden kategorialen Werte mit dem Wert, welcher am meisten vorkommt.
+
+```{r}
+# Impute NA numbers with the median
+final_df_simplified <- final_df_simplified %>% 
+  mutate_if(is.numeric, list(~ if_else(is.na(.), median(., na.rm = TRUE), .)))
+
+# Impute NA strings/factors with the most common value
+final_df_simplified <- final_df_simplified %>% 
+  mutate_if(is.character, list(~ if_else(is.na(.), mode(.), .)))
+```
+
+```{r}
+sum(is.na(final_df_simplified))
 ```
 
 
 ```{r}
-splits <- split_data(final_df, test_size = 0.2)
+splits <- split_data(final_df_simplified, test_size = 0.2)
 train <- splits$train
 test <- splits$test
 ```
@@ -739,61 +1015,25 @@ test <- splits$test
 # Fit the model on the training data
 model <- glm(has_card ~ ., data = train, family = binomial)
 
+```
+
+
+
+```{r}
 # Make predictions on the test data
 predictions <- predict(model, test, type = "response")
 
-# Calculate the ROC AUC value
-roc_auc <- auc(test$has_card, predictions)
-
-# Print the result
-print(paste("ROC AUC:", roc_auc))
-
-f1 <- f1(test$has_card, predictions)
-
-# Print the result
-print(paste("F1 score:", f1))
-
-precision <- precision(test$has_card, predictions)
-
-# Calculate the recall
-recall <- recall(test$has_card, predictions)
-
-# Print the results
-print(paste("Precision:", precision))
-print(paste("Recall:", recall))
-
 threshold <- 0.5
-predictions_01 <- ifelse(predictions > threshold, 1, 0)
-predictions_01 <- ifelse(is.na(predictions_01), 0, predictions_01)
-accuracy <- mean(test$has_card == predictions_01)
+predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
 
-# Print the result
-print(paste("Accuracy:", accuracy))
+get_metrics(predictions_threshold, test$has_card)
 ```
 
-```{r}
-sum(is.na(final_df))
-final_df_without_na <- na.omit(final_df)
-final_df_without_na$has_card <- as.factor(final_df_without_na$has_card)
-
-splits <- split_data(final_df_without_na, test_size = 0.2)
-train <- splits$train
-test <- splits$test
-```
-
+# Decision Tree
 
 ```{r}
+library(rpart)
 
-model <- train(has_card ~ ., data = train, method = "glm", trControl = trainControl(method = "cv"))
-
-# View the selected features
-model$finalModel$variables
-```
-
-
-# Decision Tree mit den vorher verwendeten Daten
-
-```{r}
 set.seed(123)
 splits <- split_data(final_df, test_size = 0.2)
 train <- splits$train
@@ -817,6 +1057,7 @@ accuracy <- confusion_matrix$overall[1]
 print(paste("Accuracy:", accuracy))
 ```
 
+Die Klassifikation ist um einiges besser auf dem Decision Tree. Es scheint also für unseren Verwendungszweck der bessere Algorithmus zu sein. Wir untersuchen noch Erweiterungen des Decision Trees: der Random Forest.
 
 
 
@@ -847,6 +1088,8 @@ confusion_matrix <- confusionMatrix(predictions$.pred_class, test$has_card)
 # Ausgeben der Genauigkeit
 print(paste("Accuracy:", confusion_matrix$overall[1]))
 ```
+
+Der Random Forest ist ein wenig besser als der Decision Tree. Als nächstes wollen wir probieren, ob eine Hyperparameteroptimierung unser Resultat noch verbessern kann.
 
 # Hyperparamter Optimierung auf Random Forest
 
@@ -880,22 +1123,54 @@ confusion_matrix <- confusionMatrix(predictions, test$has_card)
 # Ausgeben der Genauigkeit
 print(paste("Accuracy:", confusion_matrix$overall[1]))
 ```
-
-```{r}
-train
-```
+Die Hyperparamtereoptimierung verbessert unseren Score nur minim. 
 
 
 # Recursive Feature Elimnation
 
+Eine Möglichkeit, die Leistung von Random Forest zu verbessern, ist die Verwendung von Recursive Feature Elimination (RFE).
+
+RFE ist ein Feature Selection-Verfahren, das dazu verwendet wird, die wichtigsten Features (also diejenigen Merkmale, die für die Vorhersage am wichtigsten sind) auszuwählen und alle anderen zu entfernen. Dies hat mehrere Vorteile:
+
+Es reduziert die Laufzeit von Random Forest, da weniger Features verarbeitet werden müssen.
+Es kann dazu beitragen, Overfitting zu vermeiden, indem es irrelevanten oder redundanten Features entfernt.
+Es kann dazu beitragen, die Interpretierbarkeit von Random Forest zu verbessern, da wichtigere Features leichter zu verstehen sind.
+
+
 ```{r}
+splits <- split_data(final_df, test_size = 0.2)
+train <- splits$train
+test <- splits$test
+
 # define the feature selection algorithm
-fs <- rfe(x = train[,-1], y = train[,1], sizes = c(1:ncol(train)-1), rfeControl = rfeControl(functions = rfFuncs))
+fs <- rfe(x = train %>% select(-has_card), y = train$has_card, sizes = c(1:5), rfeControl = rfeControl(functions = rfFuncs))
 
 # print the selected features
-print(fs$selectedFeatures)
-
+print(fs)
 # train a model using the selected features
-model <- train(x = train[,fs$selectedFeatures], y = train[,1], method = "rf")
+#model <- train(x = train[,fs$selectedFeatures], y = train$has_card, method = "rf")
 ```
+
+```{r}
+ggplot(data = fs, metric = "Accuracy") + theme_bw()
+```
+
+```{r}
+predictors(fs)
+```
+
+
+
+```{r}
+varimp_data <- data.frame(feature = row.names(varImp(fs))[1:8],
+                          importance = varImp(fs)[1:8, 1])
+
+ggplot(data = varimp_data, 
+       aes(x = reorder(feature, -importance), y = importance, fill = feature)) +
+  geom_bar(stat="identity") + labs(x = "Features", y = "Variable Importance") + 
+  geom_text(aes(label = round(importance, 2)), vjust=1.6, color="white", size=4) + 
+  theme_bw() + theme(legend.position = "none")
+```
+
+
 
