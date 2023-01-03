@@ -556,11 +556,15 @@ non_buyer_transactions <- transactions[transactions$account_id %in% account_ids,
 non_buyer_transactions <- merge(non_buyer_transactions, similar_non_buyers[, c("account_id", "issued")], by="account_id")
 
 ```
+
+
 ```{r}
 filtered_df <- non_buyer_transactions %>%
   filter(date >= as.Date(paste0(format(issued - months(13), "%Y-%m"), "-01")) &
          date <= as.Date(paste0(format(issued - months(1), "%Y-%m"), "-01")) - 1)
 ```
+
+
 ```{r}
 summary_df <- filtered_df %>%
   group_by(account_id, month = format(date, "%Y-%m")) %>%
@@ -643,11 +647,11 @@ summary_df_non_buyers <- merge(summary_df_non_buyers, similar_non_buyers, by = "
 final_df <- rbind(summary_df_buyers, summary_df_non_buyers)
 ```
 
-Jetzt muss noch dass issued-Datum sowie weitere Variabeln entfernt werden.
+Jetzt müssen noch einige Variabeln entfernt werden.
 
 ```{r}
 # Entferne weitere unnötige Variabeln wie ID's oder Werte, welche überall gleich sind
-final_df <- final_df %>% select(-client_id, -district_id, -district_id.accounts, -disp_id, -type, -loan_id, -account_id, -issued)
+final_df <- final_df %>% select(-client_id, -district_id, -district_id.accounts, -disp_id, -type, -loan_id, -account_id)
 ```
 
 Ausserdem scheinen einige Variabeln als Faktoren im Datensatz zu sein, welche eigentlich numerisch wären.
@@ -668,25 +672,108 @@ ggplot(data = final_df, aes(x = has_card)) +
 ```{r}
 # Durchschnittliche Werte für has_card == TRUE berechnen
 averages_true <- colMeans(final_df[final_df$has_card == TRUE,
-                                   c("median_balance_1", "median_balance_2", "median_balance_3",
-                                     "median_balance_4", "median_balance_5", "median_balance_6",
-                                     "median_balance_7", "median_balance_8", "median_balance_9",
-                                     "median_balance_10", "median_balance_11", "median_balance_12")])
+                                   c("mean_balance_1", "mean_balance_2", "mean_balance_3",
+                                     "mean_balance_4", "mean_balance_5", "mean_balance_6",
+                                     "mean_balance_7", "mean_balance_8", "mean_balance_9",
+                                     "mean_balance_10", "mean_balance_11", "mean_balance_12")])
 
 # Durchschnittliche Werte für has_card == FALSE berechnen
 averages_false <- colMeans(final_df[final_df$has_card == FALSE,
-                                    c("median_balance_1", "median_balance_2", "median_balance_3",
-                                      "median_balance_4", "median_balance_5", "median_balance_6",
-                                      "median_balance_7", "median_balance_8", "median_balance_9",
-                                      "median_balance_10", "median_balance_11", "median_balance_12")])
+                                    c("mean_balance_1", "mean_balance_2", "mean_balance_3",
+                                      "mean_balance_4", "mean_balance_5", "mean_balance_6",
+                                      "mean_balance_7", "mean_balance_8", "mean_balance_9",
+                                      "mean_balance_10", "mean_balance_11", "mean_balance_12")])
 
 # Line Plot erstellen
 ggplot() +
   geom_line(aes(x = 1:12, y = averages_true), color = "steelblue") +
   geom_line(aes(x = 1:12, y = averages_false), color = "red") +
-  labs(x = "Month", y = "Average Median Balance") +
-  scale_color_manual(name = "", values = c("steelblue" = "Buyers", "red" = "Non Buyers"))
+  labs(x = "Month", y = "Average Mean Balance") +
+  scale_color_manual(name = "", values = c("steelblue" = "Buyers", "red" = "Non Buyers")) +
+  scale_x_continuous(limits = c(1, 12)) +
+  scale_y_continuous(limits = c(0, NA))
 ```
+```{r}
+# Durchschnittliche Werte für has_card == TRUE berechnen
+averages_true <- colMeans(final_df[final_df$has_card == TRUE,
+                                   c("mean_difference_1", "mean_difference_2", "mean_difference_3",
+                                     "mean_difference_4", "mean_difference_5", "mean_difference_6",
+                                     "mean_difference_7", "mean_difference_8", "mean_difference_9",
+                                     "mean_difference_10", "mean_difference_11", "mean_difference_12")])
+
+# Durchschnittliche Werte für has_card == FALSE berechnen
+averages_false <- colMeans(final_df[final_df$has_card == FALSE,
+                                    c("mean_difference_1", "mean_difference_2", "mean_difference_3",
+                                      "mean_difference_4", "mean_difference_5", "mean_difference_6",
+                                      "mean_difference_7", "mean_difference_8", "mean_difference_9",
+                                      "mean_difference_10", "mean_difference_11", "mean_difference_12")])
+
+# Line Plot erstellen
+ggplot() +
+  geom_line(aes(x = 1:12, y = averages_true), color = "steelblue") +
+  geom_line(aes(x = 1:12, y = averages_false), color = "red") +
+  labs(x = "Month", y = "Average Mean Difference") +
+  scale_color_manual(name = "", values = c("steelblue" = "Buyers", "red" = "Non Buyers")) +
+  scale_x_continuous(limits = c(1, 12))
+```
+```{r}
+# Create the density plot
+ggplot(final_df, aes(x = issued, fill = factor(has_card))) +
+  geom_density(alpha = 0.5) +
+  labs(x = "Issued Date", y = "Density", fill = "Has Card") +
+  scale_x_date(limits = range(final_df$issued))
+```
+```{r}
+# Calculate the average sum of count_negative_difference for has_card == TRUE
+avg_sum_true <- mean(rowSums(final_df[final_df$has_card == TRUE, grep("count_negative_difference", colnames(final_df))]))
+
+# Calculate the average sum of count_negative_difference for has_card == FALSE
+avg_sum_false <- mean(rowSums(final_df[final_df$has_card == FALSE, grep("count_negative_difference", colnames(final_df))]))
+
+# Create the bar plot
+ggplot() +
+  geom_bar(aes(x = c("TRUE", "FALSE"), y = c(avg_sum_true, avg_sum_false)), stat = "identity", fill = "steelblue") +
+  labs(x = "Has Card", y = "Average Sum of Count Negative Difference")
+```
+```{r}
+# Calculate the average sum of count_negative_difference for has_card == TRUE
+avg_sum_true <- mean(rowSums(final_df[final_df$has_card == TRUE, grep("count_positive_difference", colnames(final_df))]))
+
+# Calculate the average sum of count_negative_difference for has_card == FALSE
+avg_sum_false <- mean(rowSums(final_df[final_df$has_card == FALSE, grep("count_positive_difference", colnames(final_df))]))
+
+# Create the bar plot
+ggplot() +
+  geom_bar(aes(x = c("TRUE", "FALSE"), y = c(avg_sum_true, avg_sum_false)), stat = "identity", fill = "steelblue") +
+  labs(x = "Has Card", y = "Average Sum of Count Positive Difference")
+```
+
+```{r}
+card_buyers_with_loan <- final_df[final_df$has_card & !is.na(final_df$amount),]
+card_buyers_without_loan <- final_df[final_df$has_card & is.na(final_df$amount),]
+non_buyers_with_loan <- final_df[!final_df$has_card & !is.na(final_df$amount),]
+non_buyers_without_loan <- final_df[!final_df$has_card & is.na(final_df$amount),]
+
+# Calculate the number of people in each group
+card_buyers_with_loan_count <- length(card_buyers_with_loan$has_card)
+card_buyers_without_loan_count <- length(card_buyers_without_loan$has_card)
+non_buyers_with_loan_count <- length(non_buyers_with_loan$has_card)
+non_buyers_without_loan_count <- length(non_buyers_without_loan$has_card)
+
+# Create the bar plot
+ggplot() +
+  geom_bar(aes(x = c("Card buyers with loan", "Card buyers without loan", "Non-buyers with loan", "Non-buyers without loan"), y = c(card_buyers_with_loan_count, card_buyers_without_loan_count, non_buyers_with_loan_count, non_buyers_without_loan_count)), stat = "identity") +
+  labs(x = "Group", y = "Number of People")
+```
+
+
+```{r}
+# Create the bar plot
+ggplot(final_df, aes(x = region, fill = factor(has_card))) +
+  geom_bar(position = "dodge") +
+  labs(x = "Region", y = "Number of People", fill = "Has Card")
+```
+
 
 
 # Modelle
@@ -871,7 +958,6 @@ for (i in 1:length(thresholds)) {
 } else if (all(!predictions_threshold)) {
   next
 }
-  
   # Calculate the f1
   f1 <- get_metrics(predictions_threshold, actual_values)$f1
   
@@ -898,6 +984,8 @@ return(best_threshold)
 
 Als erstes soll eine logistische Regression mit den Informationen Alter, Geschlecht, Domizilregion, Vermögen (balance-Schnitt über alle Monate) und Umsatz (difference-Schnitt über alle Monate) als Baseline Modell erstellt werden.Dafür müssen wir kurz ein neues Dataframe erstellen.
 
+
+
 ```{r}
 baseline_data <- final_df
 baseline_data$mean_balance <- rowMeans(final_df[, c("mean_balance_1", "mean_balance_2", "mean_balance_3", "mean_balance_4", 
@@ -918,7 +1006,7 @@ train <- splits$train
 test <- splits$test
 ```
 
-Das Regressionsmodell wird auf den Trainingsdaten trainiert.
+Das Regressionsmodell wird auf den Trainingsdaten trainiert. Wir verwenden die Funktion glm von der Library "stats".
 
 ```{r}
 # Fit the model on the training data
@@ -955,10 +1043,13 @@ plot_feature_importance(model)
 
 Der Threshold-Wert könnte aber angepasst werden. Je nach Veränderung werden die verschiedenen Metriken besser oder schlechter. Die Frage dabei ist, ob wir eher mehr falsche Positivvorhersagen oder Negativvorhersagen wollen. Wenn wir den Threshold senken, wird bspw. der Recall höher. Wenn wir den Threshold erhöhen, wird die Precision höher. Es ist aber nicht sinnvoll, anhand des Thresholds diese beiden Metriken zu maximieren, da es bei beiden fast keine Positiven bzw. Negative Predictions mehr gibt. 
 
-Der F1 ist eine Zusammenfassung der Precision und der Recall. Wir untersuchen, mit welchem Threshold der höchste F1-Score erzielt werden kann.
+Der F1 ist eine Zusammenfassung der Precision und der Recall. Wir untersuchen, mit welchem Threshold der höchste F1-Score erzielt werden kann. Wir probieren den Threshold auf den Trainingsdaten zu optmieren.
 
 ```{r}
-best_threshold <- find_best_threshold(predictions, test$has_card)
+suppressWarnings({
+predictions_train <- predict(model, train, type = "response")
+best_threshold <- find_best_threshold(predictions_train, train$has_card)
+})
 ```
 
 Wie sehen die anderen Metriken mit diesem Threshold aus?
@@ -1086,14 +1177,14 @@ plot_feature_importance(model)
 ```
 
 ```{r}
-find_best_threshold(predictions, test$has_card)
+predictions_train <- predict(model, train, type = "response")
+best_threshold <- find_best_threshold(predictions_train, train$has_card)
 ```
 
 ## Mit nur den beiden wichtigsten Variabeln
 
 ```{r}
-final_df_simplified_two_variables <- final_df_simplified %>% select(max_difference_12, max_difference_11)
-model <- glm(has_card ~ ., data = train, family = binomial)
+model <- glm(has_card ~ ., data = train %>% select(max_difference_12, max_difference_11, has_card), family = binomial)
 predictions <- predict(model, test, type = "response")
 
 threshold <- 0.5
@@ -1105,6 +1196,8 @@ get_metrics(predictions_threshold, test$has_card)
 
 
 # Decision Tree
+
+Für den Decison Tree verwenden wir das Package "rpart".
 
 ```{r}
 
@@ -1122,7 +1215,8 @@ get_metrics(predictions_threshold, test$has_card)
 ```{r}
 plot_confusion_matrix(predictions_threshold, test$has_card)
 make_roc_plot_and_get_auc(predictions_threshold, test$has_card)
-find_best_threshold(predictions, test$has_card)
+predictions_train <- predict(model, train, type = "prob")[, 2]
+best_threshold <- find_best_threshold(predictions_train, train$has_card)
 rpart.plot(model)
 ```
 
@@ -1132,6 +1226,8 @@ Die Klassifikation ist um einiges besser auf dem Decision Tree. Es scheint also 
 
 
 # Random Forest 
+
+Für den Random Forest brauchen wir das Package "randomForest". Es verwendet Breiman's random forest algorithmus und kann für Klassifikation und Regression verwendet werden.
 
 Beim Random Forest muss unsere Zielvariabel noch in einen Faktor umgewandelt werden, damit die Wahrscheinlichkeiten vorhergesagt werden können.
 
@@ -1157,7 +1253,8 @@ Der Random Forest ist ein wenig besser als der Decision Tree. Als nächstes woll
 ```{r}
 plot_confusion_matrix(predictions_threshold, test$has_card)
 make_roc_plot_and_get_auc(predictions_threshold, test$has_card)
-find_best_threshold(predictions, test$has_card)
+predictions_train <- predict(model, train, type = "prob")[, 2]
+best_threshold <- find_best_threshold(predictions_train, train$has_card)
 ```
 
 ```{r}
@@ -1170,6 +1267,8 @@ top_features <- head(importance_values, n = 10)
 top_features
 
 ```
+
+TODO: CHECK if ifelse is correct
 
 ```{r}
 # Initialize empty vector to store f1-scores
@@ -1212,7 +1311,7 @@ plot(1:length(f1_scores), f1_scores, type = "l", xlab = "Number of variables", y
 ```{r}
 set.seed(27)
 # Fit a random forest model to the training data
-model <- randomForest(has_card ~ ., data = train %>% select(has_card, importance_values$variable[1:7]), method = "class")
+model <- randomForest(has_card ~ ., data = train %>% select(has_card, importance_values$variable[1:best_index]), method = "class")
 
 # Make predictions on the test data (second column is for probability of true)
 predictions <- predict(model, test, type = "prob")[, 2]
@@ -1272,6 +1371,7 @@ Es kann dazu beitragen, die Interpretierbarkeit von Random Forest zu verbessern,
 
 
 ```{r}
+if (FALSE) {
 # Define the control object
 control <- rfeControl(functions = rfFuncs,
                       method = "repeatedcv",
@@ -1286,10 +1386,11 @@ model <- rfe(x = train %>% select(-has_card), y = train$has_card,
 selected_features <- model$optVariables
 
 print(model)
-
+}
 ```
 
 ```{r}
+if (FALSE) {
 # Fit a random forest model using the selected features
 model <- randomForest(has_card ~ ., data = train[c(selected_features, "has_card")], method = "class")
 
@@ -1302,7 +1403,123 @@ predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
 
 # Evaluate the model's performance
 get_metrics(predictions_threshold, test$has_card)
+}
+```
+
+# XGBoost
+
+Das XGBoost Modell wird mit der Library "xgboost" trainiert.
+
+```{r}
+library(xgboost)
+
+# Set the seed for reproducibility
+set.seed(27)
+
+train$has_card <- as.numeric(train$has_card)
+test$has_card <- as.numeric(test$has_card)
+
+# Convert the data to a matrix
+mat <- as.matrix(train %>% select(has_card, importance_values$variable[1:7]))
+
+# Split the data into training and testing sets
+train_ind <- sample(1:nrow(mat), nrow(mat) * 0.8)
+train_mat <- mat[train_ind, ]
+test_mat <- mat[-train_ind, ]
+
+# Split the labels and predictors
+train_labels <- train_mat[, 1]
+train_preds <- train_mat[, -1]
+test_labels <- test_mat[, 1]
+test_preds <- test_mat[, -1]
+
+param <- list(max_depth = 100, eta = 0.1, nthread = 2)
+
+
+# Train the model
+model <- xgboost(data = train_preds, label = train_labels, nrounds = 1000, objective = "binary:logistic", verbose = 0, maximize = "F1", params = param)
+
+print(model)
+
+# Make predictions on the test data
+predictions <- predict(model, test_preds)
+
+# Threshold the predicted probabilities
+threshold <- 0.5
+predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+
+# Evaluate the model's performance
+get_metrics(predictions_threshold, test_labels)
+```
+
+## Hyperparameteroptimierung
+
+```{r}
+library(xgboost)
+
+# Set the seed for reproducibility
+set.seed(27)
+
+train$has_card <- as.numeric(train$has_card)
+test$has_card <- as.numeric(test$has_card)
+
+# Convert the data to a matrix
+mat <- as.matrix(train %>% select(has_card, importance_values$variable[1:7]))
+
+# Split the data into training and testing sets
+train_ind <- sample(1:nrow(mat), nrow(mat) * 0.8)
+train_mat <- mat[train_ind, ]
+test_mat <- mat[-train_ind, ]
+
+# Split the labels and predictors
+train_labels <- train_mat[, 1]
+train_preds <- train_mat[, -1]
+test_labels <- test_mat[, 1]
+test_preds <- test_mat[, -1]
+
+train_labels <- as.factor(train_labels)
+test_labels <- as.factor(test_labels)
+
+# Define the hyperparameter grid
+param_grid <- expand.grid(nrounds = c(1000, 2000, 5000),
+                         eta = c(0.1, 0.2, 0.3),
+                         max_depth = c(3, 5, 7, 10),
+                         gamma = c(0, 0.1, 0.2, 1),
+                         colsample_bytree = c(0.5, 0.8),
+                         min_child_weight = c(1, 3, 5),
+                         subsample = c(0.5, 0.8, 1))
+
+# Train the model using caret's train() function
+model <- train(x = train_preds, y = train_labels, method = "xgbTree", trControl = trainControl(method = "cv", number = 5), tuneGrid = param_grid, metric = "F", verbose = FALSE, verbosity = 0)
+
+
+print(model)
+
+# Make predictions on the test data
+predictions <- predict(model, test_preds)
+
+# Threshold the predicted probabilities
+threshold <- 0.5
+predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+
+# Evaluate the model's performance
+get_metrics(predictions_threshold, test_labels)
 ```
 
 
+# Fazit
+
+## Mehrwert des Modells in der Praxis
+
+Bei unserem Model handelt es sich um ein Product Affinity Model. Es soll voraussagen, ob eine Person (hier eine Kund:in der Bank) ein bestimmtes Produkt kauft (hier eine Kreditkarte) oder nicht. Ausserdem gibt unser Modell auch an, mit welcher Wahrscheinlichkeit sie diese kauft. Dies könnte von grossem Mehrwert für eine Bank sein, da sie anhand des Modells die Marketing-Strategie optimieren und ihre Ressourcen gezielter einsetzen können.
+
+Es kann Banken helfen, ihre Marketing-Bemühungen besser zu segmentieren, indem es zeigt, wer wahrscheinlich an einer Kreditkarte interessiert ist und wer nicht. Dies kann dazu beitragen, die Conversion-Rate zu verbessern und die Kosten für Marketing-Aktionen zu senken. 
+
+Ein weiterer Vorteil, den ein Product Affinity Model bieten kann, ist, dass es Banken helfen kann, ihre Kundenbeziehungen zu verbessern, indem es ihnen ermöglicht, personalisierte Angebote und Services anzubieten.
+
+Wenn das Modell vorhersagt, wer wahrscheinlich eine Kreditkarte kaufen wird, können Banken ihren Kunden personalisierte Angebote und Services anbieten, die auf ihre individuellen Bedürfnisse und Vorlieben abgestimmt sind. Dies kann dazu beitragen, die Kundenzufriedenheit zu erhöhen und die Kundenbindung zu stärken. Dafür müsste das Modell aber noch erweitert werden.
+
+Ein personalisiertes Angebot könnte beispielsweise eine Kreditkarte sein, die speziell auf die Bedürfnisse und Vorlieben eines Kunden abgestimmt ist, z.B. mit einem hohen Rückzahlungsprozentsatz für bestimmte Kategorien von Einkäufen oder mit Reiseversicherungen und anderen Vorteilen, die für den Kunden besonders wichtig sind.
+
+Indem Banken ihren Kunden personalisierte Angebote und Services anbieten, können sie ihre Beziehungen zu ihnen stärken und ihre Zufriedenheit erhöhen.
 
