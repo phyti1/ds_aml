@@ -24,7 +24,7 @@ R-Version: **[Default] [64-bit] C:\\Program Files\\R\\R-4.1.0**
 rm(list = ls())
 
 # nötige Packete
-packages <- c("tidyverse", "data.table", "tidymodels", "lubridate", "caret")
+packages <- c("tidyverse", "data.table", "tidymodels", "lubridate", "caret", "pROC", "randomForest", "rpart", "rpart.plot")
 
 # Noch nicht installierte Pakete installieren
 installed_packages <- packages %in% rownames(installed.packages())
@@ -324,10 +324,12 @@ full <- full %>% filter(age >= 25)
 ```{r}
 full
 ```
+Somit bleiben uns 3858 Kunden.
+
+# Trennung Buyer / Nicht-Buyer
 
 
-
-Als nächstes werden alle Zeilen mit Kreditkartenkäufern von den Nicht-Käufern getrennt
+Als nächstes werden alle Zeilen mit Kreditkartenkäufern von den Nicht-Käufern getrennt.
 
 
 ```{r}
@@ -339,7 +341,6 @@ has_card_function <- function(x) {
   }
 }
 
-# Erstelle die neue Spalte "has_card" mit der apply()-Funktion und der oben definierten Funktion
 full$has_card <- sapply(full[, "card_id"], has_card_function)
 full <- full %>% select(-card_id, -type.cards)
 
@@ -348,9 +349,8 @@ card_buyers <- full %>% filter(has_card == TRUE)
 non_buyers <- full %>% filter(has_card == FALSE)
 ```
 
-Jetzt können wir noch einige Variabeln entfernen, welche keinen Einfluss auf das Modell haben sollten. 
 
-# Aufsummieren der Transaktionen
+# Ermitteln der Differenz der Transaktionen
 
 ```{r}
 sample_n(transactions, 5)
@@ -380,12 +380,8 @@ df <- df %>%
     # Berechnen Sie den Unterschied zwischen dem vorherigen Kontostand und dem aktuellen Kontostand
     difference <- balance - prev_balance
 
-    # Fügen Sie eine Spalte mit der Transaktionsart hinzu
-    type <- "add"
-    type[difference < 0] <- "subtract"
-
     # Erstellen Sie das Dataframe mit den Transaktionen für jeden Nutzer
-    transactions_df <- data.frame(amount, date, balance, prev_balance, difference, type)
+    transactions_df <- data.frame(amount, date, balance, prev_balance, difference)
     transactions_df
   }) %>%
   ungroup()
@@ -395,12 +391,17 @@ transactions <- unnest(df, transactions)
 # Hinzufügen des ersten amounts bei jedem Account
 transactions$difference <- ifelse(is.na(transactions$difference) & is.na(transactions$prev_balance) & (transactions$amount == transactions$balance), transactions$amount, transactions$difference)
 
-transactions$amount <- NULL
+#transactions$amount <- NULL
 
-transactions
+sample_n(transactions, 5)
 ```
 
-## Zusammenfassen der Transaktionen für Card Buyers
+```{r}
+transactions[transactions$amount != abs(transactions$difference), ]
+```
+
+
+# Zusammenfassen der Transaktionen für Card Buyers
 
 Um die Transaktions-Daten in unseren Modellen brauchen zu können, muss für jeden Kunde ein Rollup-Fenster erstellt werden. Dies fasst die Transaktionen der zwölf Monate vor dem Erhalt einer Kreditkarte zusammen (minus einen Monat Input Lag). Auf diesen Monaten werden die Transaktionen zusammengefasst.
 
@@ -510,7 +511,7 @@ summary_df_buyers
 ```
 
 
-## Finden von ähnlichen Nutzern
+# Finden von ähnlichen Nutzern
 
 Zu jedem Kartenkäufer soll nun ein ähnlicher Nichtkäufer gefunden werden
 
@@ -544,7 +545,7 @@ for (i in 1:nrow(card_buyers)) {
 ```
 
 
-## Zusammenfassen der Transaktionen für non buyers
+# Zusammenfassen der Transaktionen für non buyers
 
 Auch hier sollen die Transaktionen gleich wie bei den Käufern zusammengefasst werden.
 
@@ -592,7 +593,6 @@ month_counts <- summary_df %>%
 # Prüfe, ob jedes account_id 12 Monate hat
 month_counts <- month_counts %>% filter(month_count != 12)
 month_counts
-
 ```
 Auch hier haben wieder einige Kunden weniger als 12 kontinuierliche Monate.
 
@@ -621,6 +621,11 @@ summary_df$month <- NULL
 ```
 
 ```{r}
+summary_df
+```
+
+
+```{r}
 summary_df_non_buyers <- summary_df %>%
   group_by(account_id) %>%
   pivot_wider(names_from = month_number,
@@ -630,12 +635,7 @@ summary_df_non_buyers <- summary_df %>%
 Die Transaktionsdaten werden mit den anderen Daten zusammengefügt, um pro Kunde eine Zeile in einem Dataframe zu haben.
 
 ```{r}
-
 summary_df_non_buyers <- merge(summary_df_non_buyers, similar_non_buyers, by = "account_id")
-```
-
-```{r}
-merge(summary_df_non_buyers, non_buyers, by = "account_id")
 ```
 
 
@@ -658,6 +658,35 @@ final_df$unemployment_rate_95.accounts <- as.numeric(final_df$unemployment_rate_
 final_df$crimes_95 <- as.numeric(final_df$crimes_95)
 final_df$crimes_95.accounts <- as.numeric(final_df$crimes_95.accounts)
 ```
+# EDA
+
+```{r}
+ggplot(data = final_df, aes(x = has_card)) +
+  geom_bar(aes(y = ..count..), stat = "count", fill = "steelblue") +
+  labs(x = "Has Card", y = "Frequency")
+```
+```{r}
+# Durchschnittliche Werte für has_card == TRUE berechnen
+averages_true <- colMeans(final_df[final_df$has_card == TRUE,
+                                   c("median_balance_1", "median_balance_2", "median_balance_3",
+                                     "median_balance_4", "median_balance_5", "median_balance_6",
+                                     "median_balance_7", "median_balance_8", "median_balance_9",
+                                     "median_balance_10", "median_balance_11", "median_balance_12")])
+
+# Durchschnittliche Werte für has_card == FALSE berechnen
+averages_false <- colMeans(final_df[final_df$has_card == FALSE,
+                                    c("median_balance_1", "median_balance_2", "median_balance_3",
+                                      "median_balance_4", "median_balance_5", "median_balance_6",
+                                      "median_balance_7", "median_balance_8", "median_balance_9",
+                                      "median_balance_10", "median_balance_11", "median_balance_12")])
+
+# Line Plot erstellen
+ggplot() +
+  geom_line(aes(x = 1:12, y = averages_true), color = "steelblue") +
+  geom_line(aes(x = 1:12, y = averages_false), color = "red") +
+  labs(x = "Month", y = "Average Median Balance") +
+  scale_color_manual(name = "", values = c("steelblue" = "Buyers", "red" = "Non Buyers"))
+```
 
 
 # Modelle
@@ -667,8 +696,6 @@ Als nächstes sollen Modelle trainiert und evaluiert werden. Um die Resultate zu
 ```{r}
 set.seed(27)
 ```
-
-
 
 
 ## Funktionen zur Evaluierung von Modellen
@@ -800,12 +827,10 @@ plot_feature_importance <- function(model) {
   if (class(model)[1] == "glm") {
     importance <- abs(coef(model)[-1])
     names <- names(importance)
-  } 
-  
-  # Decision Tree
-  else if (class(model)[1] == "rpart") {
-    importance <- model$importance
-    names <- row.names(importance)
+    
+    # Sort feature importance and names in decreasing order
+  importance <- head(importance[order(importance, decreasing = TRUE)], 10)
+  names <- names[order(importance, decreasing = TRUE)]
   } 
   
   # Random Forest
@@ -819,9 +844,7 @@ plot_feature_importance <- function(model) {
     stop("Unrecognized model")
   }
   
-  # Sort feature importance and names in decreasing order
-  importance <- head(importance[order(importance, decreasing = TRUE)], 10)
-  names <- names[order(importance, decreasing = TRUE)]
+  
   
   # Plot feature importance
   barplot(importance, names.arg = names, las = 2, cex.names = 0.6,
@@ -829,6 +852,47 @@ plot_feature_importance <- function(model) {
 }
 ```
 
+### Threshold Plot
+
+```{r}
+
+find_best_threshold <- function(predictions, actual_values) {
+best_threshold <- 0
+best_f1 <- 0
+thresholds <- seq(0.01, 0.99, 0.01)
+f1_scores <- rep(0, length(thresholds))
+
+for (i in 1:length(thresholds)) {
+  # Set the threshold for the predictions
+  predictions_threshold <- ifelse(predictions > thresholds[i], TRUE, FALSE)
+  
+  if (all(predictions_threshold)) {
+  next
+} else if (all(!predictions_threshold)) {
+  next
+}
+  
+  # Calculate the f1
+  f1 <- get_metrics(predictions_threshold, actual_values)$f1
+  
+  f1_scores[i] <- f1
+  
+  # Update the best threshold and best f1 if necessary
+  if (f1 > best_f1) {
+    best_threshold <- thresholds[i]
+    best_f1 <- f1
+  }
+}
+
+# Display the best threshold and best recall
+print(paste("Best threshold:", best_threshold))
+print(paste("Best F1:", best_f1))
+
+plot(thresholds, f1_scores, type = "l", xlab = "Threshold", ylab = "F1 Score", main = "F1 Score with different thresholds")
+
+return(best_threshold)
+}
+```
 
 # Baseline Modell
 
@@ -894,39 +958,9 @@ Der Threshold-Wert könnte aber angepasst werden. Je nach Veränderung werden di
 Der F1 ist eine Zusammenfassung der Precision und der Recall. Wir untersuchen, mit welchem Threshold der höchste F1-Score erzielt werden kann.
 
 ```{r}
-best_threshold <- 0
-best_f1 <- 0
-thresholds <- seq(0.01, 0.99, 0.01)
-f1_scores <- rep(0, length(thresholds))
-
-for (i in 1:length(thresholds)) {
-  # Set the threshold for the predictions
-  predictions_threshold <- ifelse(predictions > thresholds[i], TRUE, FALSE)
-  
-  if (all(predictions_threshold)) {
-  next
-} else if (all(!predictions_threshold)) {
-  next
-}
-  
-  # Calculate the f1
-  f1 <- get_metrics(predictions_threshold, test$has_card)$f1
-  
-  f1_scores[i] <- f1
-  
-  # Update the best threshold and best f1 if necessary
-  if (f1 > best_f1) {
-    best_threshold <- thresholds[i]
-    best_f1 <- f1
-  }
-}
-
-# Display the best threshold and best recall
-print(paste("Best threshold:", best_threshold))
-print(paste("Best F1:", best_f1))
-
-plot(thresholds, f1_scores, type = "l", xlab = "Threshold", ylab = "F1 Score", main = "F1 Score with different thresholds")
+best_threshold <- find_best_threshold(predictions, test$has_card)
 ```
+
 Wie sehen die anderen Metriken mit diesem Threshold aus?
 
 ```{r}
@@ -972,20 +1006,32 @@ columns_to_remove
 Nun muss der Datensatz noch auf NA's überprüft werden.
 
 ```{r}
-sum(is.na(final_df_simplified))
+# Count the number of NA values in the data frame
+num_na <- sum(is.na(final_df_simplified))
 
-# Erstelle einen logischen Vektor, der angibt, ob jedes Element NA ist
+# Print the total number of NA values
+print(paste("Total number of NA values:", num_na))
+
+# Create a logical vector indicating whether each element is NA
 na_matrix <- is.na(final_df_simplified)
 
-# Summiere die Anzahl der NA- Werte pro Zeile
+# Sum the number of NA values per row
 na_counts <- rowSums(na_matrix)
+
+# Count the rows with NA values
+num_na_rows <- sum(na_counts > 0)
+
+# Print the number of rows with NA values
+print(paste("Number of rows with NA values:", num_na_rows))
+
+# Sum the number of NA values per column
 na_counts_cols <- colSums((na_matrix))
 
-# Zähle die Zeilen mit NA- Werten
-num_na_rows <- sum(na_counts > 0)
+# Count the columns with NA values
 num_na_cols <- sum(na_counts_cols > 0)
-num_na_rows
-num_na_cols
+
+# Print the number of columns with NA values
+print(paste("Number of columns with NA values:", num_na_cols))
 ```
 
 Fast jede Zeile hat irgendwo ein NA. Es sind auch viele Kolonnen betroffen. Wir können also nicht alle Observationen oder Variabeln mit NA's entfernen, da sonst der Datenverlust sehr gross wäre. Daher imputieren wir die numerischen fehlenden Werte mit dem Median und die fehlenden kategorialen Werte mit dem Wert, welcher am meisten vorkommt.
@@ -1014,10 +1060,7 @@ test <- splits$test
 ```{r}
 # Fit the model on the training data
 model <- glm(has_card ~ ., data = train, family = binomial)
-
 ```
-
-
 
 ```{r}
 # Make predictions on the test data
@@ -1029,33 +1072,60 @@ predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
 get_metrics(predictions_threshold, test$has_card)
 ```
 
+```{r}
+plot_confusion_matrix(predictions_threshold, test$has_card)
+```
+
+```{r}
+make_roc_plot_and_get_auc(predictions_threshold, test$has_card)
+```
+
+
+```{r}
+plot_feature_importance(model)
+```
+
+```{r}
+find_best_threshold(predictions, test$has_card)
+```
+
+## Mit nur den beiden wichtigsten Variabeln
+
+```{r}
+final_df_simplified_two_variables <- final_df_simplified %>% select(max_difference_12, max_difference_11)
+model <- glm(has_card ~ ., data = train, family = binomial)
+predictions <- predict(model, test, type = "response")
+
+threshold <- 0.5
+predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+
+get_metrics(predictions_threshold, test$has_card)
+```
+
+
+
 # Decision Tree
 
 ```{r}
-library(rpart)
 
-set.seed(123)
-splits <- split_data(final_df, test_size = 0.2)
-train <- splits$train
-test <- splits$test
 model <- rpart(has_card ~ ., data = train, method = "class")
 
-# Make predictions on the test data
-predictions <- predict(model, test, type = "class")
+# Make predictions on the test data (second column is for probability of true)
+predictions <- predict(model, test, type = "prob")[, 2]
 
-predictions <- as.factor(predictions)
+threshold <- 0.5
+predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
 
-
-test$has_card <- as.factor(test$has_card)
-# Calculate the confusion matrix
-confusion_matrix <- confusionMatrix(predictions, test$has_card)
-
-# Calculate the accuracy
-accuracy <- confusion_matrix$overall[1]
-
-# Print the results
-print(paste("Accuracy:", accuracy))
+get_metrics(predictions_threshold, test$has_card)
 ```
+
+```{r}
+plot_confusion_matrix(predictions_threshold, test$has_card)
+make_roc_plot_and_get_auc(predictions_threshold, test$has_card)
+find_best_threshold(predictions, test$has_card)
+rpart.plot(model)
+```
+
 
 Die Klassifikation ist um einiges besser auf dem Decision Tree. Es scheint also für unseren Verwendungszweck der bessere Algorithmus zu sein. Wir untersuchen noch Erweiterungen des Decision Trees: der Random Forest.
 
@@ -1063,67 +1133,131 @@ Die Klassifikation ist um einiges besser auf dem Decision Tree. Es scheint also 
 
 # Random Forest 
 
+Beim Random Forest muss unsere Zielvariabel noch in einen Faktor umgewandelt werden, damit die Wahrscheinlichkeiten vorhergesagt werden können.
+
 ```{r}
-set.seed(123)
-final_df$has_card <- as.factor(final_df$has_card)
-final_df <- na.omit(final_df)
-# Teilen Sie den Datensatz in Trainings- und Testdaten auf
-train_index <- createDataPartition(final_df$has_card, p = 0.8, list = FALSE)
-train <- final_df[train_index, ]
-test <- final_df[-train_index, ]
+train$has_card <- as.factor(train$has_card)
+# Fit a random forest model to the training data
+model <- randomForest(has_card ~ ., data = train, method = "class")
 
-# Erstellen Sie ein Random Forest-Modell
-model <- rand_forest() %>% set_mode("classification")
+# Make predictions on the test data (second column is for probability of true)
+predictions <- predict(model, test, type = "prob")[, 2]
 
-# Trainieren Sie das Modell mit bootstrapped resampling
-model <- model %>% fit(has_card ~ ., data = train)
+# Threshold the predicted probabilities
+threshold <- 0.5
+predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
 
-# Machen Sie Vorhersagen auf den Testdaten
-predictions <- model %>% predict(test)
-
-test$has_card <- as.factor(test$has_card)
-# Berechnen Sie die Genauigkeit des Modells
-confusion_matrix <- confusionMatrix(predictions$.pred_class, test$has_card)
-
-# Ausgeben der Genauigkeit
-print(paste("Accuracy:", confusion_matrix$overall[1]))
+# Evaluate the model's performance
+get_metrics(predictions_threshold, test$has_card)
 ```
 
 Der Random Forest ist ein wenig besser als der Decision Tree. Als nächstes wollen wir probieren, ob eine Hyperparameteroptimierung unser Resultat noch verbessern kann.
 
+
+```{r}
+plot_confusion_matrix(predictions_threshold, test$has_card)
+make_roc_plot_and_get_auc(predictions_threshold, test$has_card)
+find_best_threshold(predictions, test$has_card)
+```
+
+```{r}
+importance_values <- varImp(model)
+importance_values$variable <- rownames(varImp(model)) 
+importance_values <- importance_values[order(importance_values$Overall, decreasing = TRUE),]
+
+# Wählen Sie die top 10 Merkmale aus
+top_features <- head(importance_values, n = 10)
+top_features
+
+```
+
+```{r}
+# Initialize empty vector to store f1-scores
+f1_scores <- c()
+
+# Loop through each variable and fit a random forest model
+for (i in 1:50) {
+  # Select subset of variables
+  vars_subset <- importance_values$variable[1:i]
+  
+  # Fit random forest model
+  train_reduced <- train %>% select(has_card, vars_subset)
+  model <- randomForest(has_card ~ ., data = train_reduced, method = "class")
+  
+  # Make predictions on test data
+  predictions <- predict(model, test, type = "prob")[, 2]
+  
+  # Threshold predictions
+  threshold <- 0.5
+  predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+  
+  # Calculate f1-score
+  f1 <- get_metrics(predictions_threshold, test$has_card)$f1
+  
+  # Append f1-score to vector
+  f1_scores <- c(f1_scores, f1)
+}
+
+# Find the index of the maximum f1-score
+best_index <- which.max(f1_scores)
+
+# Print the best f1-score and the corresponding number of variables
+print(paste("Best f1-score:", f1_scores[best_index]))
+print(paste("Number of variables:", best_index))
+
+# Plot the f1-scores
+plot(1:length(f1_scores), f1_scores, type = "l", xlab = "Number of variables", ylab = "f1-score")
+```
+
+```{r}
+set.seed(27)
+# Fit a random forest model to the training data
+model <- randomForest(has_card ~ ., data = train %>% select(has_card, importance_values$variable[1:7]), method = "class")
+
+# Make predictions on the test data (second column is for probability of true)
+predictions <- predict(model, test, type = "prob")[, 2]
+
+# Threshold the predicted probabilities
+threshold <- 0.5
+predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+
+# Evaluate the model's performance
+get_metrics(predictions_threshold, test$has_card)
+```
+
+
+
 # Hyperparamter Optimierung auf Random Forest
 
 ```{r}
-# Legen Sie den Hyperparameter-Suchbereich fest
-param_grid <- expand.grid(ntree = c(50, 100, 150),
-                          nodesize = c(5, 10, 15))
+set.seed(27)
+# Define the hyperparameter grid
+param_grid <- expand.grid(mtry = c(0.1, 1, 10, 100),
+                         splitrule = c("gini", "extratrees"),
+                         min.node.size = c(1, 10, 15, 20),
+                         max.depth = seq(1, 30, 5),
+                         ntree = c(100, 500, 1000))
 
-mtry_values <- c(1, 2, 3)
-splitrule_values <- c("gini", "extratrees")
-min.node.size_values <- c(10, 20, 30)
+# Define the model using the train() function
+model <- randomForest(has_card ~ .,
+               data = train %>% select(has_card, importance_values$variable[1:7]),
+               method = "rf",
+               tuneGrid = param_grid,
+               trControl = trainControl(method = "cv", number = 5))
 
-# Erstellen Sie den Tuning-Parameter-Grid mit expand.grid
-param_grid <- expand.grid(mtry = c(1, 5, 10), 
-                         splitrule = c("gini", "extratrees"), 
-                         min.node.size = c(5, 10, 15))
+# Make predictions on the test data
+predictions <- predict(model, test, type = "prob")[, 2]
 
-# Definieren Sie das Trainingskontrollobjekt
-train_control <- trainControl(method = "cv", number = 5)
+# Threshold the predicted probabilities
+threshold <- 0.5
+predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
 
-# Führen Sie die Grid Search durch
-model <- train(has_card ~ ., data = train, method = "ranger",
-               trControl = train_control, tuneGrid = param_grid)
+print(model)
 
-# Machen Sie Vorhersagen auf den Testdaten
-predictions <- predict(model, test)
-
-# Erstellen Sie eine Confusion Matrix
-confusion_matrix <- confusionMatrix(predictions, test$has_card)
-
-# Ausgeben der Genauigkeit
-print(paste("Accuracy:", confusion_matrix$overall[1]))
+# Evaluate the model's performance
+get_metrics(predictions_threshold, test$has_card)
 ```
-Die Hyperparamtereoptimierung verbessert unseren Score nur minim. 
+
 
 
 # Recursive Feature Elimnation
@@ -1138,38 +1272,36 @@ Es kann dazu beitragen, die Interpretierbarkeit von Random Forest zu verbessern,
 
 
 ```{r}
-splits <- split_data(final_df, test_size = 0.2)
-train <- splits$train
-test <- splits$test
+# Define the control object
+control <- rfeControl(functions = rfFuncs,
+                      method = "repeatedcv",
+                      repeats = 5)
 
-# define the feature selection algorithm
-fs <- rfe(x = train %>% select(-has_card), y = train$has_card, sizes = c(1:5), rfeControl = rfeControl(functions = rfFuncs))
+# Perform RFE
+model <- rfe(x = train %>% select(-has_card), y = train$has_card,
+             sizes = c(1:19, seq(from = 20, to = ncol(train), by = 10)),
+             rfeControl = control)
 
-# print the selected features
-print(fs)
-# train a model using the selected features
-#model <- train(x = train[,fs$selectedFeatures], y = train$has_card, method = "rf")
+# Extract the selected features
+selected_features <- model$optVariables
+
+print(model)
+
 ```
 
 ```{r}
-ggplot(data = fs, metric = "Accuracy") + theme_bw()
-```
+# Fit a random forest model using the selected features
+model <- randomForest(has_card ~ ., data = train[c(selected_features, "has_card")], method = "class")
 
-```{r}
-predictors(fs)
-```
+# Make predictions on the test data
+predictions <- predict(model, test, type = "prob")[, 2]
 
+# Threshold the predicted probabilities
+threshold <- 0.5
+predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
 
-
-```{r}
-varimp_data <- data.frame(feature = row.names(varImp(fs))[1:8],
-                          importance = varImp(fs)[1:8, 1])
-
-ggplot(data = varimp_data, 
-       aes(x = reorder(feature, -importance), y = importance, fill = feature)) +
-  geom_bar(stat="identity") + labs(x = "Features", y = "Variable Importance") + 
-  geom_text(aes(label = round(importance, 2)), vjust=1.6, color="white", size=4) + 
-  theme_bw() + theme(legend.position = "none")
+# Evaluate the model's performance
+get_metrics(predictions_threshold, test$has_card)
 ```
 
 
