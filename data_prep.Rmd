@@ -614,8 +614,8 @@ for (i in 1:nrow(card_buyers))
   current_buyer <- card_buyers[i, ]
   
   similar_non_buyers_temp <- non_buyers %>% filter(gender == current_buyer$gender & 
-                                                   region == current_buyer$region) 
-                                                   #abs(age - current_buyer$age) <= 100)
+                                                   region == current_buyer$region &
+                                                   abs(age - current_buyer$age) <= 10)
   
   # damit nicht der gleiche non_buyer doppelt verwendet wird
   similar_non_buyers_temp <- similar_non_buyers_temp[!similar_non_buyers_temp$client_id %in% similar_non_buyers$client_id,]
@@ -908,6 +908,7 @@ set.seed(27)
 
 Als Vorbereitung für die Modelle müssen wir unsere Daten zu Trainings- und Testdaten unterteilen. Dafür erstellen wir eine Funktion, welche auf verschiedenen Varianten des Datensatz gebraucht werden kann.
 
+
 ```{r}
 split_data <- function(df, test_size = 0.2) {
   set.seed(27)
@@ -915,7 +916,25 @@ split_data <- function(df, test_size = 0.2) {
   train <- df[split, ]
   test <- df[-split, ]
   
-  return(list(train = train, test = test))
+  # create cv folds
+  train_sets <- c()
+  val_sets <- c()
+
+  set.seed(27)
+  cv_folds <- vfold_cv(train, v = 10)
+  # Iteriere über alle Folds
+  for (i in 1:nrow(cv_folds)) 
+  {
+    # Wähle den aktuellen Trainings- und Validierungsdatensatz aus
+    train_set <- cv_folds$splits[[i]] %>% analysis()
+    val_set <- cv_folds$splits[[i]] %>% assessment()
+  
+    # Speichere den aktuellen Trainings- und Validierungsdatensatz in den Listen
+    train_sets[[i]] <- train_set
+    val_sets[[i]] <- val_set
+  }
+  
+  return(list(train = train, test = test, cv_folds = cv_folds, train_sets = train_sets, val_sets = val_sets))
 }
 ```
 
@@ -972,6 +991,23 @@ get_metrics <- function(predictions, true_values) {
   # Return the data frame
   return(metrics)
 }
+
+get_metrics_mean <- function(pred_list, true_list)
+{
+  # berechne das Mittel aller Scores über alle folds
+  if(class(true_list[[1]]) == "data.frame")
+  {
+    true_list <- lapply(val_sets, function(x) x$has_card)
+  }
+  metrics <- list()
+  for(i in 1:length(pred_list))
+  {
+    metrics[[i]] <- get_metrics(pred_list[[i]], true_list[[i]])
+  }
+  metrics_mean <- colMeans(bind_rows(metrics))
+  return(metrics_mean)
+}
+
 ```
 
 ### Konfusionsmatrix mit Plot
@@ -1120,6 +1156,8 @@ Darauf wird ein Train-Test-Split mit 80% Trainingsdaten und 20% Testdaten gebrau
  
 ```{r}
 splits <- split_data(baseline_data, test_size = 0.2)
+train_sets <- splits$train_sets
+val_sets <- splits$val_sets
 train <- splits$train
 test <- splits$test
 ```
@@ -1127,22 +1165,38 @@ test <- splits$test
 Das Regressionsmodell wird auf den Trainingsdaten trainiert. Wir verwenden die Funktion glm von der Library "stats".
 
 ```{r}
-# Fit the model on the training data
-model <- glm(has_card ~ ., data = train, family = binomial)
+train_glm <- function(train_df, val_df)
+{
+  model <- glm(has_card ~ ., data = train_df, family = binomial)
+  # Make predictions on the validation data
+  predictions <- predict(model, val_df, type = "response")
+
+  threshold <- 0.5
+  predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+  return(predictions_threshold)
+}
+
+get_cv_scores <- function(train_routine)
+{
+  predictions_list <- c()
+  # Fit the model on the training data
+  for(i in 1:length(val_sets))
+  {
+    predictions_threshold <- train_routine(train_sets[[i]], val_sets[[i]])
+    predictions_list[[i]] <- predictions_threshold
+  }
+  # refit on full training dataset
+  predictions_threshold <- train_glm(train, test)
+
+  return(get_metrics_mean(predictions_list, val_sets))
+}
+
+get_cv_scores(train_glm)
+
 ```
 
-Als nächstes sollen die Predictions gemacht und damit die Metriken erstellt werden. Da die logistische Regression eine Zahl zwischen 0 und 1 zurückgibt, müssen wir anhand eines Thresholds die Werte zu TRUE und FALSE umwandeln. Der Threshold gibt an, ab welchem Wahrscheinlichkeitswert eine Vorhersage als positiv betrachtet wird. Standardmäßig ist der Threshold auf 0.5 gesetzt, was bedeutet, dass alle Wahrscheinlichkeiten größer als 0.5 als positiv und alle Wahrscheinlichkeiten kleiner als 0.5 als negativ betrachtet werden.
+Als Nächstes sollen die Predictions gemacht und damit die Metriken erstellt werden. Da die logistische Regression eine Zahl zwischen 0 und 1 zurückgibt, müssen wir anhand eines Thresholds die Werte zu TRUE und FALSE umwandeln. Der Threshold gibt an, ab welchem Wahrscheinlichkeitswert eine Vorhersage als positiv betrachtet wird. Standardmäßig ist der Threshold auf 0.5 gesetzt, was bedeutet, dass alle Wahrscheinlichkeiten größer als 0.5 als positiv und alle Wahrscheinlichkeiten kleiner als 0.5 als negativ betrachtet werden.
 
-```{r}
-# Make predictions on the test data
-predictions <- predict(model, test, type = "response")
-
-threshold <- 0.5
-predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
-
-
-get_metrics(predictions_threshold, test$has_card)
-```
 
 ```{r}
 plot_confusion_matrix(predictions_threshold, test$has_card)
@@ -1156,8 +1210,7 @@ make_roc_plot_and_get_auc(predictions_threshold, test$has_card)
 plot_feature_importance(model)
 ```
 
-
-## Threshold 
+## Threshold
 
 Der Threshold-Wert könnte aber angepasst werden. Je nach Veränderung werden die verschiedenen Metriken besser oder schlechter. Die Frage dabei ist, ob wir eher mehr falsche Positivvorhersagen oder Negativvorhersagen wollen. Wenn wir den Threshold senken, wird bspw. der Recall höher. Wenn wir den Threshold erhöhen, wird die Precision höher. Es ist aber nicht sinnvoll, anhand des Thresholds diese beiden Metriken zu maximieren, da es bei beiden fast keine Positiven bzw. Negative Predictions mehr gibt. 
 
@@ -1259,27 +1312,21 @@ final_df_simplified <- final_df_simplified %>%
 sum(is.na(final_df_simplified))
 ```
 
-
 ```{r}
 splits <- split_data(final_df_simplified, test_size = 0.2)
+train_sets <- splits$train_sets
+val_sets <- splits$val_sets
 train <- splits$train
 test <- splits$test
 ```
 
-```{r}
-# Fit the model on the training data
-model <- glm(has_card ~ ., data = train, family = binomial)
-```
 
 ```{r}
-# Make predictions on the test data
-predictions <- predict(model, test, type = "response")
-
-threshold <- 0.5
-predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
-
-get_metrics(predictions_threshold, test$has_card)
+suppressWarnings({
+  get_cv_scores(train_glm)
+})
 ```
+
 
 ```{r}
 plot_confusion_matrix(predictions_threshold, test$has_card)
@@ -1302,32 +1349,30 @@ best_threshold <- find_best_threshold(predictions_train, train$has_card)
 ## Mit nur den beiden wichtigsten Variabeln
 
 ```{r}
-model <- glm(has_card ~ ., data = train %>% select(max_difference_12, max_difference_11, has_card), family = binomial)
-predictions <- predict(model, test, type = "response")
-
-threshold <- 0.5
-predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+predictions_threshold <- train_glm(train %>% select(max_difference_12, max_difference_11, has_card), test)
 
 get_metrics(predictions_threshold, test$has_card)
 ```
-
-
 
 # Decision Tree
 
 Für den Decison Tree verwenden wir das Package "rpart".
 
 ```{r}
+train_dt <- function(train_df, val_df)
+{
+  model <- rpart(has_card ~ ., data = train_df, method = "class")
 
-model <- rpart(has_card ~ ., data = train, method = "class")
+  # Make predictions on the test data (second column is for probability of true)
+  predictions <- predict(model, val_df, type = "prob")[, 2]
 
-# Make predictions on the test data (second column is for probability of true)
-predictions <- predict(model, test, type = "prob")[, 2]
+  threshold <- 0.5
+  predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+  return(predictions_threshold)
+}
 
-threshold <- 0.5
-predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+get_cv_scores(train_dt)
 
-get_metrics(predictions_threshold, test$has_card)
 ```
 
 ```{r}
@@ -1350,27 +1395,40 @@ Für den Random Forest brauchen wir das Package "randomForest". Es verwendet Bre
 Beim Random Forest muss unsere Zielvariabel noch in einen Faktor umgewandelt werden, damit die Wahrscheinlichkeiten vorhergesagt werden können.
 
 ```{r}
-train$has_card <- as.factor(train$has_card)
-# Fit a random forest model to the training data
-model <- randomForest(has_card ~ ., data = train, method = "class")
+final_df_rf <- final_df_simplified
+final_df_rf$has_card <- as.factor(final_df_rf$has_card)
 
-# Make predictions on the test data (second column is for probability of true)
-predictions <- predict(model, test, type = "prob")[, 2]
+splits <- split_data(final_df_rf, test_size = 0.2)
+train_sets <- splits$train_sets
+val_sets <- splits$val_sets
+train <- splits$train
+test <- splits$test
 
-# Threshold the predicted probabilities
-threshold <- 0.5
-predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+train_rf <- function(train_df, val_df)
+{
+  # Fit a random forest model to the training data
+  model <- randomForest(has_card ~ ., data = train_df, method = "class")
+  
+  # Make predictions on the test data (second column is for probability of true)
+  predictions <- predict(model, val_df, type = "prob")[, 2]
+  
+  # Threshold the predicted probabilities
+  threshold <- 0.5
+  predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+  return(predictions_threshold)
+}
 
-# Evaluate the model's performance
-get_metrics(predictions_threshold, test$has_card)
+get_cv_scores(train_rf)
 ```
 
-Der Random Forest ist ein wenig besser als der Decision Tree. Als nächstes wollen wir probieren, ob eine Hyperparameteroptimierung unser Resultat noch verbessern kann.
-
+Der Random Forest ist ein wenig besser als der Decision Tree. Als Nächstes wollen wir probieren, ob eine Hyperparameteroptimierung unser Resultat noch verbessern kann.
 
 ```{r}
 plot_confusion_matrix(predictions_threshold, test$has_card)
 make_roc_plot_and_get_auc(predictions_threshold, test$has_card)
+
+set.seed(27)
+model <- randomForest(has_card ~ ., data = train, method = "class")
 predictions_train <- predict(model, train, type = "prob")[, 2]
 best_threshold <- find_best_threshold(predictions_train, train$has_card)
 ```
@@ -1528,12 +1586,10 @@ get_metrics(predictions_threshold, test$has_card)
 
 Das XGBoost Modell wird mit der Library "xgboost" trainiert.
 
+
 ```{r}
 # Set the seed for reproducibility
 set.seed(27)
-
-train$has_card <- as.numeric(train$has_card)
-test$has_card <- as.numeric(test$has_card)
 
 # Convert the data to a matrix
 mat <- as.matrix(train %>% select(has_card, importance_values$variable[1:7]))
@@ -1551,21 +1607,42 @@ test_preds <- test_mat[, -1]
 
 param <- list(max_depth = 100, eta = 0.1, nthread = 2)
 
+splits <- split_data(final_df_rf, test_size = 0.2)
+train_sets <- splits$train_sets
+val_sets <- splits$val_sets
+train <- splits$train
+test <- splits$test
 
-# Train the model
-model <- xgboost(data = train_preds, label = train_labels, nrounds = 1000, objective = "binary:logistic", verbose = 0, maximize = "F1", params = param)
+train$has_card <- as.numeric(train$has_card)
+test$has_card <- as.numeric(test$has_card)
 
-print(model)
+train_xgb <- function(train_df, val_df)
+{
+  # Convert the data to a matrix
+  mat_train <- as.matrix(train_df %>% select(has_card, importance_values$variable[1:7]))
+  mat_val <- as.matrix(val_df %>% select(has_card, importance_values$variable[1:7]))
+  # Split the labels and predictors
+  train_labels <- mat_train[, 1]
+  train_preds <- mat_train[, -1]
+  test_labels <- mat_val[, 1]
+  test_preds <- mat_val[, -1]
+  param <- list(max_depth = 100, eta = 0.1, nthread = 2)
+    
+  # Train the model
+  model <- xgboost(data = as.double(train_preds), label = train_labels, nrounds = 1000, objective = "binary:logistic", verbose = 0, maximize = "F1", params = param)
 
-# Make predictions on the test data
-predictions <- predict(model, test_preds)
+  # Make predictions on the test data
+  predictions <- predict(model, test_preds)
 
-# Threshold the predicted probabilities
-threshold <- 0.5
-predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+  # Threshold the predicted probabilities
+  threshold <- 0.5
+  predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+  return(predictions_threshold)
+}
 
-# Evaluate the model's performance
-get_metrics(predictions_threshold, test_labels)
+# train, Evaluate the model's performance
+get_cv_scores(train_xgb)
+
 ```
 
 ## Hyperparameteroptimierung
