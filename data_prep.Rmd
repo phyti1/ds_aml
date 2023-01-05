@@ -588,7 +588,7 @@ pivot_by_month <- function(summary_df)
 }
 
 summary_df_wide <- pivot_by_month(summary_df)
-summary_df_buyers <- merge(summary_df_wide, card_buyers, by = "account_id")
+summary_df_buyers <- merge(summary_df_wide, subset(card_buyers, select = -issued), by = "account_id")
 ```
 
 
@@ -614,8 +614,8 @@ for (i in 1:nrow(card_buyers))
   current_buyer <- card_buyers[i, ]
   
   similar_non_buyers_temp <- non_buyers %>% filter(gender == current_buyer$gender & 
-                                                   region == current_buyer$region & 
-                                                   abs(age - current_buyer$age) <= 100)
+                                                   region == current_buyer$region) 
+                                                   #abs(age - current_buyer$age) <= 100)
   
   # damit nicht der gleiche non_buyer doppelt verwendet wird
   similar_non_buyers_temp <- similar_non_buyers_temp[!similar_non_buyers_temp$client_id %in% similar_non_buyers$client_id,]
@@ -709,8 +709,9 @@ filtered_df <- impute_missing_months(filtered_df)
 summary_df_non_buyers <- get_summary_df(filtered_df)
 ```
 
+
 ```{r}
-print(paste(nrow(summary_df_non_buyers), nrow(summary_df)))
+print(paste(nrow(summary_df_non_buyers), nrow(summary_df_buyers)))
 ```
 
 Die Anzahl Zeilen in den summary_df's sind identisch. 
@@ -733,7 +734,7 @@ Die Transaktionsdaten werden mit den anderen Daten zusammengefügt, um pro Kunde
 ```{r}
 summary_df_wide <- pivot_by_month(summary_df_non_buyers)
 
-summary_df_non_buyers <- merge(summary_df_wide, similar_non_buyers, by = "account_id")
+summary_df_non_buyers <- merge(summary_df_wide, subset(similar_non_buyers, select = -issued), by = "account_id")
 print(nrow(summary_df_non_buyers))
 ```
 
@@ -748,7 +749,7 @@ Jetzt müssen noch einige Variabeln entfernt werden.
 
 ```{r}
 # Entferne weitere unnötige Variabeln wie ID's oder Werte, welche überall gleich sind
-final_df <- final_df %>% select(-client_id, -district_id, -district_id.accounts, -disp_id, -type, -loan_id, -account_id, -issued.x, -issued.y)
+final_df <- final_df %>% select(-client_id, -district_id, -district_id.accounts, -disp_id, -type, -loan_id, -account_id)
 ```
 
 Ausserdem scheinen einige Variabeln als Faktoren im Datensatz zu sein, welche eigentlich numerisch wären.
@@ -761,6 +762,20 @@ final_df$crimes_95.accounts <- as.numeric(final_df$crimes_95.accounts)
 ```
 
 # EDA
+
+```{r}
+colSums(is.na(final_df))[colSums(is.na(final_df)) > 0]
+```
+
+Bei den standard deviations exisiteren nun viele NA's, da bei den imputierten Monaten nur eine Transaktion pro Monat existiert und dadurch durch n-1 = 0 dividiert wird. Diese NA's werden mit 0 imputiert.
+
+```{r}
+std_cols <- colnames(final_df %>% select(starts_with("std")))
+final_df[,std_cols] <- final_df[,std_cols] %>% replace(is.na(.), 0)
+colSums(is.na(final_df))[colSums(is.na(final_df)) > 0]
+```
+
+
 
 ```{r}
 ggplot(data = final_df, aes(x = has_card)) +
@@ -815,6 +830,7 @@ ggplot() +
   scale_color_manual(name = "", values = c("steelblue" = "Buyers", "red" = "Non Buyers")) +
   scale_x_continuous(limits = c(1, 12))
 ```
+
 ```{r}
 # Create the density plot
 ggplot(final_df, aes(x = issued, fill = factor(has_card))) +
@@ -822,6 +838,7 @@ ggplot(final_df, aes(x = issued, fill = factor(has_card))) +
   labs(x = "Issued Date", y = "Density", fill = "Has Card") +
   scale_x_date(limits = range(final_df$issued))
 ```
+
 ```{r}
 # Calculate the average sum of count_negative_difference for has_card == TRUE
 avg_sum_true <- mean(rowSums(final_df[final_df$has_card == TRUE, grep("count_negative_difference", colnames(final_df))]))
@@ -834,6 +851,7 @@ ggplot() +
   geom_bar(aes(x = c("TRUE", "FALSE"), y = c(avg_sum_true, avg_sum_false)), stat = "identity", fill = "steelblue") +
   labs(x = "Has Card", y = "Average Sum of Count Negative Difference")
 ```
+
 ```{r}
 # Calculate the average sum of count_negative_difference for has_card == TRUE
 avg_sum_true <- mean(rowSums(final_df[final_df$has_card == TRUE, grep("count_positive_difference", colnames(final_df))]))
@@ -892,6 +910,7 @@ Als Vorbereitung für die Modelle müssen wir unsere Daten zu Trainings- und Tes
 
 ```{r}
 split_data <- function(df, test_size = 0.2) {
+  set.seed(27)
   split <- createDataPartition(df$has_card, p = 1 - test_size, list = FALSE)
   train <- df[split, ]
   test <- df[-split, ]
@@ -927,9 +946,9 @@ get_metrics <- function(predictions, true_values) {
   
   # Calculate Cohen's kappa
   n <- length(predictions)
-observed_agreement <- sum(predictions == true_values)
-expected_agreement <- sum(predictions == true_values) / n
-kappa <- (observed_agreement - expected_agreement) / (n - expected_agreement)
+  observed_agreement <- sum(predictions == true_values)
+  expected_agreement <- sum(predictions == true_values) / n
+  kappa <- (observed_agreement - expected_agreement) / (n - expected_agreement)
   
   # Calculate Matthews correlation coefficient
   confusion_matrix <- table(predictions, true_values)
@@ -989,15 +1008,15 @@ Die ROC-Kurve ist auf der x-Achse der falsch-positiv-Rate (FPR) und auf der y-Ac
 Die AuC (Area Under the Curve) ist eine Metrik, die aus der ROC-Kurve berechnet wird und die Leistung des Klassifikators zusammenfasst. Sie gibt an, wie gut der Klassifikator im Vergleich zu einem zufälligen Klassifikator ist. Eine AUC von 1 bedeutet, dass das Modell perfekt in der Lage ist, positive und negative Klassen zu unterscheiden, während eine AUC von 0.5 bedeutet, dass das Modell keine bessere Leistung als Zufall erzielt. Die AUC kann Werte zwischen 0 und 1 annehmen. Eine AUC von 0 bedeutet, dass das Modell völlig inkorrekt ist. Im Allgemeinen gilt, je größer die AUC, desto besser ist das Modell im Vergleich zu anderen Modellen.
 
 ```{r}
-make_roc_plot_and_get_auc <- function(predictions, true_values){
+make_roc_plot_and_get_auc <- function(predictions, true_values)
+{
+  roc_curve <- roc(as.numeric(predictions), as.numeric(true_values) - 1)
 
-roc_curve <- roc(as.numeric(predictions), as.numeric(true_values) - 1)
+  plot(roc_curve, xlab = "False Positive Rate", ylab = "True Positive Rate", main ="ROC Curve")
 
-plot(roc_curve, xlab = "False Positive Rate", ylab = "True Positive Rate", main ="ROC Curve")
+  auc <- auc(roc_curve)
 
-auc <- auc(roc_curve)
-
-return(auc)
+  return(auc)
 }
 ```
 
@@ -1043,39 +1062,39 @@ plot_feature_importance <- function(model) {
 ```{r}
 
 find_best_threshold <- function(predictions, actual_values) {
-best_threshold <- 0
-best_f1 <- 0
-thresholds <- seq(0.01, 0.99, 0.01)
-f1_scores <- rep(0, length(thresholds))
+  best_threshold <- 0
+  best_f1 <- 0
+  thresholds <- seq(0.01, 0.99, 0.01)
+  f1_scores <- rep(0, length(thresholds))
 
-for (i in 1:length(thresholds)) {
-  # Set the threshold for the predictions
-  predictions_threshold <- ifelse(predictions > thresholds[i], TRUE, FALSE)
+  for (i in 1:length(thresholds)) {
+    # Set the threshold for the predictions
+    predictions_threshold <- ifelse(predictions > thresholds[i], TRUE, FALSE)
   
-  if (all(predictions_threshold)) {
-  next
-} else if (all(!predictions_threshold)) {
-  next
-}
-  # Calculate the f1
-  f1 <- get_metrics(predictions_threshold, actual_values)$f1
+    if (all(predictions_threshold)) {
+      next
+    } else if (all(!predictions_threshold)) {
+      next
+    }
+    # Calculate the f1
+    f1 <- get_metrics(predictions_threshold, actual_values)$f1
   
-  f1_scores[i] <- f1
+    f1_scores[i] <- f1
   
-  # Update the best threshold and best f1 if necessary
-  if (f1 > best_f1) {
-    best_threshold <- thresholds[i]
-    best_f1 <- f1
+    # Update the best threshold and best f1 if necessary
+    if (f1 > best_f1) {
+      best_threshold <- thresholds[i]
+      best_f1 <- f1
+    }
   }
-}
 
-# Display the best threshold and best recall
-print(paste("Best threshold:", best_threshold))
-print(paste("Best F1:", best_f1))
+  # Display the best threshold and best recall
+  print(paste("Best threshold:", best_threshold))
+  print(paste("Best F1:", best_f1))
 
-plot(thresholds, f1_scores, type = "l", xlab = "Threshold", ylab = "F1 Score", main = "F1 Score with different thresholds")
+  plot(thresholds, f1_scores, type = "l", xlab = "Threshold", ylab = "F1 Score", main = "F1 Score with different thresholds")
 
-return(best_threshold)
+  return(best_threshold)
 }
 ```
 
@@ -1146,8 +1165,8 @@ Der F1 ist eine Zusammenfassung der Precision und der Recall. Wir untersuchen, m
 
 ```{r}
 suppressWarnings({
-predictions_train <- predict(model, train, type = "response")
-best_threshold <- find_best_threshold(predictions_train, train$has_card)
+  predictions_train <- predict(model, train, type = "response")
+  best_threshold <- find_best_threshold(predictions_train, train$has_card)
 })
 ```
 
@@ -1229,7 +1248,7 @@ Fast jede Zeile hat irgendwo ein NA. Es sind auch viele Kolonnen betroffen. Wir 
 ```{r}
 # Impute NA numbers with the median
 final_df_simplified <- final_df_simplified %>% 
-  mutate_if(is.numeric, list(~ if_else(is.na(.), median(., na.rm = TRUE), .)))
+  mutate_if(is.numeric, list(~ if_else(is.na(.), median(., na.rm = TRUE), as.double(.))))
 
 # Impute NA strings/factors with the most common value
 final_df_simplified <- final_df_simplified %>% 
