@@ -602,6 +602,7 @@ Am Ende wird der Nichtkäufer mit dem ähnlichsten Alter gewählt.
 
 ```{r}
 
+print("Finde passende non-buyers")
 pb <- txtProgressBar(min = 0, max = nrow(card_buyers), style = 3, width = 50, char = "=")
 
 # Erstelle ein leeres DataFrame "similar_non_buyers"
@@ -1173,25 +1174,33 @@ train_glm <- function(train_df, val_df)
 
   threshold <- 0.5
   predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
-  return(predictions_threshold)
+  return(list(predictions_threshold, model, predictions))
 }
 
-get_cv_scores <- function(train_routine)
+# requires: train_sets, val_sets, train, test datasets
+get_cv_scores <- function(train_routine, train_sets, val_sets, train, test)
 {
   predictions_list <- c()
   # Fit the model on the training data
   for(i in 1:length(val_sets))
   {
-    predictions_threshold <- train_routine(train_sets[[i]], val_sets[[i]])
+    predictions_threshold <- train_routine(train_sets[[i]], val_sets[[i]])[[1]]
     predictions_list[[i]] <- predictions_threshold
   }
   # refit on full training dataset
-  predictions_threshold <- train_glm(train, test)
-
-  return(get_metrics_mean(predictions_list, val_sets))
+  refit_result <- train_routine(train, test)
+  predictions_threshold <- refit_result[[1]]
+  model <- refit_result[[2]]
+  
+  return(list(get_metrics_mean(predictions_list, val_sets), predictions_threshold, model))
 }
 
-get_cv_scores(train_glm)
+cv_return <- get_cv_scores(train_glm, train_sets, val_sets, train, test)
+metrics <- cv_return[[1]]
+predictions_threshold <- cv_return[[2]]
+model <- cv_return[[3]]
+
+metrics
 
 ```
 
@@ -1226,6 +1235,9 @@ suppressWarnings({
 Wie sehen die anderen Metriken mit diesem Threshold aus?
 
 ```{r}
+# Make predictions on the test data
+predictions <- predict(model, test, type = "response")
+
 predictions_threshold <- ifelse(predictions > best_threshold, TRUE, FALSE)
 get_metrics(predictions_threshold, test$has_card)
 ```
@@ -1323,10 +1335,13 @@ test <- splits$test
 
 ```{r}
 suppressWarnings({
-  get_cv_scores(train_glm)
+  cv_results <- get_cv_scores(train_glm, train_sets, val_sets, train, test)
+  metrics <- cv_return[[1]]
+  predictions_threshold <- cv_return[[2]]
+  model <- cv_return[[3]]
+  metrics
 })
 ```
-
 
 ```{r}
 plot_confusion_matrix(predictions_threshold, test$has_card)
@@ -1341,15 +1356,16 @@ make_roc_plot_and_get_auc(predictions_threshold, test$has_card)
 plot_feature_importance(model)
 ```
 
+
 ```{r}
-predictions_train <- predict(model, train, type = "response")
+predictions_train <- train_glm(train, train)[[3]]
 best_threshold <- find_best_threshold(predictions_train, train$has_card)
 ```
 
 ## Mit nur den beiden wichtigsten Variabeln
 
 ```{r}
-predictions_threshold <- train_glm(train %>% select(max_difference_12, max_difference_11, has_card), test)
+predictions_threshold <- train_glm(train %>% select(max_difference_12, max_difference_11, has_card), test)[[1]]
 
 get_metrics(predictions_threshold, test$has_card)
 ```
@@ -1368,11 +1384,15 @@ train_dt <- function(train_df, val_df)
 
   threshold <- 0.5
   predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
-  return(predictions_threshold)
+  return(list(predictions_threshold, model, predictions))
 }
 
-get_cv_scores(train_dt)
+cv_return <- get_cv_scores(train_dt, train_sets, val_sets, train, test)
+metrics <- cv_return[[1]]
+predictions_threshold <- cv_return[[2]]
+model <- cv_return[[3]]
 
+metrics
 ```
 
 ```{r}
@@ -1415,10 +1435,14 @@ train_rf <- function(train_df, val_df)
   # Threshold the predicted probabilities
   threshold <- 0.5
   predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
-  return(predictions_threshold)
+  return(list(predictions_threshold, model, predictions))
 }
 
-get_cv_scores(train_rf)
+cv_return <- get_cv_scores(train_rf, train_sets, val_sets, train, test)
+metrics <- cv_return[[1]]
+predictions_threshold <- cv_return[[2]]
+model <- cv_return[[3]]
+metrics
 ```
 
 Der Random Forest ist ein wenig besser als der Decision Tree. Als Nächstes wollen wir probieren, ob eine Hyperparameteroptimierung unser Resultat noch verbessern kann.
@@ -1607,29 +1631,34 @@ test_preds <- test_mat[, -1]
 
 param <- list(max_depth = 100, eta = 0.1, nthread = 2)
 
-splits <- split_data(final_df_rf, test_size = 0.2)
+final_df_xgb <- final_df_simplified
+
+final_df_xgb$has_card <- as.numeric(final_df_xgb$has_card)
+
+splits <- split_data(final_df_xgb, test_size = 0.2)
 train_sets <- splits$train_sets
 val_sets <- splits$val_sets
 train <- splits$train
 test <- splits$test
 
-train$has_card <- as.numeric(train$has_card)
-test$has_card <- as.numeric(test$has_card)
+
 
 train_xgb <- function(train_df, val_df)
 {
   # Convert the data to a matrix
   mat_train <- as.matrix(train_df %>% select(has_card, importance_values$variable[1:7]))
   mat_val <- as.matrix(val_df %>% select(has_card, importance_values$variable[1:7]))
+  
   # Split the labels and predictors
   train_labels <- mat_train[, 1]
   train_preds <- mat_train[, -1]
   test_labels <- mat_val[, 1]
   test_preds <- mat_val[, -1]
+  
   param <- list(max_depth = 100, eta = 0.1, nthread = 2)
     
   # Train the model
-  model <- xgboost(data = as.double(train_preds), label = train_labels, nrounds = 1000, objective = "binary:logistic", verbose = 0, maximize = "F1", params = param)
+  model <- xgboost(data = train_preds, label = train_labels, nrounds = 1000, objective = "binary:logistic", verbose = 0, maximize = "F1", params = param)
 
   # Make predictions on the test data
   predictions <- predict(model, test_preds)
@@ -1637,11 +1666,15 @@ train_xgb <- function(train_df, val_df)
   # Threshold the predicted probabilities
   threshold <- 0.5
   predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
-  return(predictions_threshold)
+  return(list(predictions_threshold, model, predictions))
 }
 
 # train, Evaluate the model's performance
-get_cv_scores(train_xgb)
+cv_results <- get_cv_scores(train_xgb, train_sets, val_sets, train, test)
+metrics <- cv_return[[1]]
+predictions_threshold <- cv_return[[2]]
+model <- cv_return[[3]]
+metrics
 
 ```
 
@@ -1654,7 +1687,7 @@ set.seed(27)
 train$has_card <- as.numeric(train$has_card)
 test$has_card <- as.numeric(test$has_card)
 
-# Convert the data to a matrix
+# Convert the data to a matrix$
 mat <- as.matrix(train %>% select(has_card, importance_values$variable[1:7]))
 
 # Split the data into training and testing sets
@@ -1681,7 +1714,7 @@ param_grid <- expand.grid(nrounds = c(1000, 2000, 5000),
                          subsample = c(0.5, 0.8, 1))
 
 # Train the model using caret's train() function
-model <- train(x = train_preds, y = train_labels, method = "xgbTree", trControl = trainControl(method = "cv", number = 5), tuneGrid = param_grid, metric = "F", verbose = FALSE, verbosity = 0)
+model <- train(x = train_preds, y = train_labels, method = "xgbTree", trControl = trainControl(method = "cv", number = 5), tuneGrid = param_grid, metric = "F1", verbose = FALSE, verbosity = 0)
 
 
 print(model)
