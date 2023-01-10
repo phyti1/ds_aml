@@ -24,7 +24,7 @@ R-Version: **[Default] [64-bit] C:\\Program Files\\R\\R-4.1.0**
 rm(list = ls())
 
 # nötige Packete
-packages <- c("tidyverse", "data.table", "tidymodels", "lubridate", "caret", "pROC", "randomForest", "rpart", "rpart.plot", "xgboost")
+packages <- c("tidyverse", "data.table", "tidymodels", "lubridate", "caret", "pROC", "randomForest", "rpart", "rpart.plot", "xgboost", "DALEX")
 
 # Noch nicht installierte Pakete installieren
 installed_packages <- packages %in% rownames(installed.packages())
@@ -37,16 +37,17 @@ invisible(lapply(packages, library, character.only = TRUE))
 
 # change options
 options(dplyr.summarise.inform = FALSE)
+
+set.seed(27)
 ```
 
-In folgendem Junk werden alle Tabellen aus den CSV's eingelesen.
-Doku Daten: https://sorry.vse.cz/~berka/challenge/PAST/index.html
-(rechte Seite PKDD'99 Challenge > Data > Financial Data Description)
-
+Die Daten haben wir von folgender Quelle bezogen und werden auch auf dieser genauer Beschrieben: https://sorry.vse.cz/~berka/challenge/PAST/index.html
+(linke Seite PKDD'99 Challenge > Data > Financial Data Description)
 
 # Einlesen der Daten
 
 Der Datensatz besteht aus acht verschiedenen Tabellen, welche teils durch Keys miteinander verknüpft sind.
+
 ```{r}
 root_path <- "./xselling_banking_data-1/xselling_banking_data/"
 
@@ -91,7 +92,7 @@ Es gibt also keine fehlende Werte in diesem Dataframe.
 ```{r}
 sample_n(cards, 5)
 ```
-Auch bei card muss das Datum umgewandelt werden, der zeitliche Teil wird ignoriert, da er immer 0 ist.
+Die Card-Tabelle enthält die Kolonnen Card-ID, Disp-ID (welche auf die Dispositon-Tabelle verweist), den Typ der Karte und das Ausstellungsdatum. Auch hier muss das Datum umgewandelt werden. Der zeitliche Teil wird ignoriert, da er immer 0 ist. Weiter werden Gold-Karten zu normalen Karten umgewandelt und Junior-Karten entfernt, da unser Modell das Kaufen einer normalen Karte vorhersagen soll. Auch hier werden wieder die fehlenden Werte geprüft.
 
 ```{r}
 cards$issued <- as.Date(as.character(cards$issued), format= "%y%m%d")
@@ -102,19 +103,19 @@ cards <- filter(cards, type == "classic")
 sum(is.na(cards))
 ```
 
+Es gibt keine fehlende Werte, welche weitere Aktionen erfordern würden.
+
 ## Clients
 
 ```{r}
 sample_n(clients, 10)
 ```
 
-In der Tabelle existiert die Spalte birth_number, welcher man auf den ersten Blick die Datumsräpresentation nicht ansieht.
-In der Doku wird die Struktur deutlich, sie ist für Männer YYMMDD und für Frauen YYMMDD+50DD.
-In Folge wird die Nummer in ihre Datumsräpresentation konvertiert und die Spalte "gender" als male/female aufgeschlüsselt.
-Zudem wird das Alter der clients bezogen auf das Jahr 1999 herausextrahiert, da der Datensatz aus diesem Jahr stammt.
-Es wird nicht year(Sys.Date()) verwendet, damit die Daten auch in Zukunft konsistent blieben.
+Die Tabelle Clients enthält die Client-ID, das Geburtsdatum und die District-ID (welche auf die District-Tabelle verweist). Der Spalte Geburtsdatum sieht man auf den ersten Blick die Datumsräpresentation nicht an. In der Doku wird aber die Struktur ersichtlich: Das Datumsformat ist für Männer YYMMDD und für Frauen YYMMDD+50DD.
 
+In Folge wird die Nummer in ihre Datumsräpresentation konvertiert und die Spalte "gender" als male/female aufgeschlüsselt. Zudem wird das Alter der Kunden im Jahr 1999 berechnet, da der Datensatz aus diesem Jahr stammt.
 
+Ausserdem werden auch hier wieder die fehlenden Werte überprüft.
 
 ```{r}
 # Months above 12 must be female
@@ -154,31 +155,35 @@ clients <- clients %>%
 
 sum(is.na(clients))
 ```
+Auch hier gibt es keine fehlenden Werte, welche untersucht werden müssten.
+
+Jugendliche und Personen, welche während des Zeitraums des Datensatzes erst erwachsen worden sind, sollen nicht in die Auswertung einfliessen.
+Da sich der Datensatz über einen Zeitraum von sechs Jahren erstreckt werden alle Clients jünger als 25 Jahre herausgefiltert.
+
 ```{r}
-accounts
-clients
+clients <- clients %>% filter(age >= 25)
 ```
-
-
 
 ## Dispositions
 
 ```{r}
 sample_n(dispositions, 5)
 ```
-
-Bei Dispositions sollen nur Owners verwendet werden, da die Analyse nur Eigentümer von Konten behandeln soll.
+Die Tabelle Dispostions enthält die Disposition-ID, die Client-ID (welche auf die Tabelle Clients verweist), die Account-ID (welche auf die Tabelle Accounts verweist) und den Typ der Disposition. Disposition steht dabei für die Rechte eines Kunden für ein gewisses Konto. Hier sollen nur Owners verwendet werden, da die Analyse nur Eigentümer von Konten behandeln soll.
 
 ```{r}
 dispositions <- dispositions %>% filter(type == 'OWNER')
 
 sum(is.na(dispositions))
 ```
+Auch hier gibt es keine fehlenden Werte, welche genauer untersucht werden müssten.
 
 ## Districts
 
-Bei district sind die Spaltennamen der Tabelle abhanden gekommen.
-Hier werden die Tabellennamen umbenannt, gemäss Doku.
+```{r}
+sample_n(districts, 5)
+```
+Die Tabelle Districts enthält demographische Informationen über verschiedene Gebiete. Die Spaltennamen sind hier nur nummeriert und müssen richtig benannt werden. Dies können wir anhand der Doku machen.
 
 ```{r}
 districts <- rename(districts, district_id = A1, district_name = A2, region = A3, 
@@ -193,6 +198,7 @@ districts <- rename(districts, district_id = A1, district_name = A2, region = A3
 
 sum(is.na(districts))
 ```
+Auch hier gibt es keine fehlenden Werte.
 
 ## Transactions
 
@@ -200,43 +206,68 @@ sum(is.na(districts))
 sample_n(transactions, 5)
 ```
 
+Die Transaktions-Tabelle enthält die Kolonnen Transaktions-ID, Account-ID (welche auf die Tabelle Accounts verweist), Date (das Datum der Transaktion), Type (den Typ der Transaktion), Operation und k_symbol (weitere kategorische Informationen über die Transaktion), Amount (der absolute Wert der Transaktion), Balance (der neue Kontostand) und Informationen über die Bank und den Account.
 
-In den Transaktionen muss das Datum gemäss Format YYMMDD konvertiert werden.
+In den Transaktionen muss das Datum gemäss Format YYMMDD konvertiert und die verschiedenen tschechischen Ausdrücke übersetzt werden. Ein weiteres Problem ist, dass Amount immer eine positive Zahl ist, auch wenn sich die Balance negativ verändert. Dies soll später behandelt werden.
 
 ```{r}
-# Rename k_symbol
-transactions <- rename(transactions, c("characterization" = "k_symbol")) 
-
 # Change formats
 transactions$date <- as.Date(as.character(transactions$date), format= "%y%m%d")
 transactions$amount <- as.numeric(transactions$amount)
 transactions$balance <- as.numeric(transactions$balance)
 
 # Translate values
-transactions$type[transactions$type == "PRIJEM"] <- "credit"
+transactions$type[transactions$type == "PRIJEM"] <- "income"
 transactions$type[transactions$type == "VYDAJ"]  <- "withdrawal"
 transactions$type[transactions$type == "VYBER"]  <- "withdrawal"
 
 transactions$operation[transactions$operation == "VKLAD"]          <- "cash credit"
 transactions$operation[transactions$operation == "PREVOD Z UCTU"]  <- "collection"
 transactions$operation[transactions$operation == "VYBER"]          <- "cash withdrawal"
-transactions$operation[transactions$operation == " "]              <- "unknown"
 transactions$operation[transactions$operation == "PREVOD NA UCET"] <- "remittance"
 transactions$operation[transactions$operation == "VYBER KARTOU"]   <- "card withdrawal"
 
-transactions$characterization[transactions$characterization == " "] <- "unknown"
-transactions$characterization[transactions$characterization == "DUCHOD"] <- "pension"
-transactions$characterization[transactions$characterization == "UROK"] <- "interest"
-transactions$characterization[transactions$characterization == "SIPO"] <- "household"
-transactions$characterization[transactions$characterization == "SLUZBY"] <- "payment statement"
-transactions$characterization[transactions$characterization == "POJISTNE"] <- "insurance"
-transactions$characterization[transactions$characterization == "SANKC. UROK"]  <- "neg_interest"
-transactions$characterization[transactions$characterization == "UVER"]  <- "loan_pay"
+transactions$k_symbol[transactions$k_symbol == "DUCHOD"] <- "pension"
+transactions$k_symbol[transactions$k_symbol == "UROK"] <- "interest"
+transactions$k_symbol[transactions$k_symbol == "SIPO"] <- "household"
+transactions$k_symbol[transactions$k_symbol == "SLUZBY"] <- "payment statement"
+transactions$k_symbol[transactions$k_symbol == "POJISTNE"] <- "insurance"
+transactions$k_symbol[transactions$k_symbol == "SANKC. UROK"]  <- "neg_interest"
+transactions$k_symbol[transactions$k_symbol == "UVER"]  <- "loan_pay"
 
 sum(is.na(transactions))
 ```
 
+In dieser Spalte gibt es eine grosse Anzahl fehlender Werte. Bereits im Sample ist ersichtlich, dass bei den Kolonnen bank, k_symbol und account fehlende Werte als NA oder als leerer string vorkommen. Der Anteil fehlender Werte soll als nächstes untersucht werden.
+
+```{r}
+missing_bank_percentage = round(sum(transactions$bank == '') * 100 / dim(transactions)[1], 2)
+missing_k_symbol_percentage = round(sum(transactions$k_symbol == '') * 100 / dim(transactions)[1], 2)
+missing_account_percentage = round(sum(is.na(transactions$account)) * 100 / dim(transactions)[1], 2)
+
+print(paste("In der Kolonne Bank fehlen", missing_bank_percentage, "% der Werte."))
+print(paste("In der Kolonne k_symbol fehlen", missing_k_symbol_percentage, "% der Werte."))
+print(paste("In der Kolonne Account fehlen", missing_account_percentage, "% der Werte."))
+```
+
+Bei den Kolonnen bank und account fehlen fast drei Viertel der Werte, bei k_symbol beinahe die Hälfte. Daher haben wir uns entschieden, diese Kolonnen vom Dataframe zu entfernen.
+
+```{r}
+transactions$bank <- NULL
+transactions$k_symbol <- NULL
+transactions$account <- NULL
+```
+
+Jetzt schauen wir uns nochmals die fehlenden Werte an.
+
+```{r}
+sum(is.na(transactions))
+```
+Durch das Entfernen der drei Spalten konnten alle fehlenden Werte entfernt werden.
+
 ## Orders
+
+Die Tabelle Orders enthält Informationen über einen Zahlungsauftrag. Sie enthällt die Kolonnen Order-ID, Account-ID (welche auf die Tabelle Accounts verweist), Bank-To (welche beschreibt, an welche Bank die Zahlung geht), Account-To (welche auf die Tabelle Accounts verweist und den Empfänger der Zahlung angibt), Amount (den Betrag der Zahlung) und k_symbol (den Typ der Transaktion). Die Werte in der Spalte k_symbol sollen wieder übersetzt werden. Fehlende Werte sollen hier mit "unknown" ersetzt werden.
 
 ```{r}
 sample_n(orders, 5)
@@ -251,21 +282,23 @@ orders$characterization[orders$characterization == "SIPO"]     <- "household"
 orders$characterization[orders$characterization == "UVER"]     <- "loan"
 orders$characterization[orders$characterization == "POJISTNE"] <- "insurance"
 orders$characterization[orders$characterization == "LEASING"]  <- "leasing"
-
-# Categorize NA as unknown
-orders$characterization[is.na(orders$characterization)] <- "unknown"
+orders$characterization[orders$characterization == " "]  <- "unknown"
+orders$characterization[orders$characterization == ""]  <- "unknown"
 
 orders$amount <- as.numeric(orders$amount)
 
-sum(is.na(loans))
+sum(is.na(orders))
 ```
 
+Auch hier gibt es keine fehlenden Werte.
 
 ## Loans
 
 ```{r}
 sample_n(loans, 5)
 ```
+
+Die Tabelle Loans enthält Informationen über Darlehen der verschiedenen Accounts. Dabei stehen uns Informationen wie das Datum, die Höhe, die Dauer, der Betrag der zahlungen und den Status der Darlehen zur Verfügung. Auch hier soll wieder das Datumsformat geändert und der Status der Darlehen in einen besser lesbaren Wert umgewandelt werden. Die Informationen über die verschiedenen Status sind der Dokumentation des Datensatzes zu entnehmen.
 
 ```{r}
 loans$date <- as.Date(as.character(loans$date), format= "%y%m%d")
@@ -281,56 +314,92 @@ loans$status[loans$status == "D"] <- "running_in_debt"
 sum(is.na(loans))
 ```
 
+Auch hier gibt es keine fehlenden Werte.
 
 # Zusammenfügen der Dataframes
 
-In diesem Abschnitt werden die verschiedenen Tabellen zusammen gesetzt.
-Dabei werden loan, cards und district it left join angehängt, damit fehlende Spalten nicht den Datensatz verkleinern.
-Die Transaktionsdaten werden hier noch nicht zusammengeführt.
+Als nächstes fassen wir die Dataframes zu einem grossen Dataframe zusammen, damit wir später Modelle darauf trainieren können. Dabei müssen wir überprüfen, ob es sich bei den Verbindungen der verschiedenen Tabellen um n zu n Beziehungen handelt. Wir starten mit der Tabelle Clients und fügen immer mehr Tabellen hinzu.
+
+## Clients und Dispositions
 
 ```{r}
-# Clients mit dispositions
+print(paste("Anzahl Kunden in Clients:", dim(clients)[1]))
+print(paste("Anzahl Dispositions:", dim(dispositions)[1]))
+```
+Es gibt also weniger Dispositions als Clients. Aber gibt es Clients mit mehreren Dispositions?
+
+```{r}
+length(unique(dispositions$client_id))
+```
+
+Nein, es gibt keine Clients mit mehreren Dispositionen. Wir können also die beiden Dataframes anhand eines Inner-Joins miteinander verbinden, verlieren dabei aber mehr als 600 Kunden. Diese Kunden sind für uns sowieso irrelevant, da sie keine Konten besitzen.
+
+```{r}
 full <- inner_join(clients, dispositions, by = "client_id", suffix = c(".client", ".dispositions"))
-sum(duplicated(full$client_id))
+print(paste("Anzahl Kunden mit Dispositionen:", dim(full)[1]))
+```
+Es bleiben also 3858 Kunden.
 
-# Full mit account
+## Accounts
+
+```{r}
+print(paste("Anzahl Accounts:", dim(accounts)[1]))
+```
+
+Es gibt also gleich viele Accounts wie Dispositionen. Auch hier soll wieder überprüft werden, ob jeder Account genau einen Owner hat.
+
+```{r}
+# Count the number of dispositions per client
+acc_counts <- count(accounts, "client_id")
+
+# Create a summary of the counts
+summary <- table(acc_counts$n)
+
+summary
+```
+Jeder Account hat genau einen Owner. Das Dataframe Accounts kann also zu unserem grossen Dataframe hinzugefügt werden.
+
+```{r}
 full <- inner_join(full, accounts, by = "account_id", suffix = c("", ".accounts"))
-sum(duplicated(full$account_id))
+dim(full)[1]
+```
+Unser Dataframe hat immer noch eine Länge von 4500.
 
-# Full mit loan
-sum(duplicated(loans$account_id))
+## Loans
+
+```{r}
+print(paste("Anzahl Loans:", dim(loans)[1]))
+```
+Es gibt nur 682 Loans. Das bedeutet, dass nicht jeder Kunde ein Darlehen hat, was Sinn ergibt. Weiter soll noch überprüft werden, ob es Kunden gibt, welche mehrere Darlehen haben.
+
+```{r}
+length(unique(loans$account_id))
+```
+
+Es gibt also keine Kunden, welche mehrere Darlehen bezogen haben. Die Loans sollen an das gesamte Dataframe mittels Left Join agehängt werden. So gibt es Kunden, welche keine Loans haben. Bei diesen sollen die fehlenden numerischen Werte durch 0 ersetzt und der Status auf "no_loan" geändert werden. 
+
+```{r}
 full <- left_join(full, loans, by = "account_id", suffix = c("", ".loans"))
+full$amount <- ifelse(is.na(full$amount), 0, full$amount)
+full$duration <- ifelse(is.na(full$duration), 0, full$duration)
+full$payments <- ifelse(is.na(full$payments), 0, full$payments)
+full$status <- ifelse(is.na(full$status), "no_loan", full$status)
+```
 
-# Full mit cards
+## Cards
+
+```{r}
+print(paste("Anzahl Cards:", dim(cards)[1]))
+```
+```{r}
+length(unique(cards$disp_id))
+```
+
+Es gibt 747 Kunden mit Karten, kein Kunde hat mehrere Karten. Es macht wieder Sinn, dass nicht alle Kunden eine Karte habe. Der Typ der Karte ist immer gleich. Daher wird der Typ der Karte durch einen boolischen Wert "has_card" ersetzt. Dies wird auch unsere Zielvariabel in den Modellen sein.Auch die Card-ID kann entfernt werden.
+
+```{r}
 full <- left_join(full, cards, by = "disp_id", suffix = c("", ".cards"))
-sum(duplicated(cards$disp_id))
-
-# District Informations for client
-full <- left_join(full, districts, by = "district_id")
-
-# District informations for card
-full <- left_join(full, districts, by = c("district_id.accounts"="district_id"), suffix = c("", ".accounts"))
-
-sample_n(full, 5)
 ```
-
-Jugendliche und Personen, welche während des Zeitraums des Datensatzes erst erwachsen worden sind, sollen nicht in die Auswertung einfliessen.
-Da sicher der Datensatz über einen Zeitraum von sechs Jahren erstreckt werden alle Clients jünger als 25 Jahre herausgefiltert.
-
-```{r}
-full <- full %>% filter(age >= 25)
-```
-
-```{r}
-full
-```
-Somit bleiben uns 3858 Kunden.
-
-# Trennung Buyer / Nicht-Buyer
-
-
-Als nächstes werden alle Zeilen mit Kreditkartenkäufern von den Nicht-Käufern getrennt.
-
 
 ```{r}
 has_card_function <- function(x) {
@@ -343,7 +412,113 @@ has_card_function <- function(x) {
 
 full$has_card <- sapply(full[, "card_id"], has_card_function)
 full <- full %>% select(-card_id, -type.cards)
+```
 
+## Orders
+
+```{r}
+print(paste("Anzahl Orders:", dim(orders)[1]))
+```
+
+```{r}
+length(unique(orders$account_id))
+```
+Es gibt 6471 Orders für 3758 Kunden. Das bedeutet, dass es Kunden gibt, welche mehrere Orders haben. Diese Informationen müssen wir zu einer Row zusammenfassen. 
+
+Dabei haben wir uns dafür entschieden, die Variabeln account_to und amount nicht in den Gesamtdatensatz einfliessen zu lassen. Der amount ist bereits in den Transaktionen inbegriffen. An wen die Zahlungen gehen sollten keinen Einfluss auf unser Modell haben.
+
+Also bleiben uns noch die Variabeln characterization und bank_to. Zuerst schauen wir uns an, wie viele verschiedene Werte diese beiden Variabeln annehmen können.
+
+```{r}
+unique(orders$characterization)
+length(unique(orders$characterization))
+```
+```{r}
+unique(orders$bank_to)
+length(unique(orders$bank_to))
+```
+
+Bei diesen beiden Variabeln gibt es nur 5 bzw. 13 verschiedene Ausprägungen. Wir können also diese Werte wie folgt an den grossen Datensatz anfügen:
+
+Für jede Ausprägung der Spalte gibt es eine neue Kolonne. Diese Kolonne nimmt den Wert der Anzahl der Orders mit dieser characterization bzw. bank_to an.
+
+```{r}
+characterizations <- orders %>%
+  group_by(account_id, characterization) %>%
+  count()
+
+characterizations_wide <- characterizations %>%
+  spread(key = characterization, value = n)
+
+bank_tos <- orders %>%
+  group_by(account_id, bank_to) %>%
+  count()
+
+bank_tos_wide <- bank_tos %>%
+  spread(key = bank_to, value = n)
+
+orders <- merge(characterizations_wide, bank_tos_wide, by = "account_id")
+
+orders[is.na(orders)] <- 0
+```
+
+```{r}
+full <- left_join(full, orders, by = "account_id")
+```
+
+Die fehlenden Werte in diesen Kolonnen müssen jetzt noch mit 0 ersetzt werden. Der Einfachheit halber setzen wir diese Werte hardcoded.
+
+```{r}
+full$household[is.na(full$household)] <- 0
+full$insurance[is.na(full$insurance)] <- 0
+full$leasing[is.na(full$leasing)] <- 0
+full$loan[is.na(full$loan)] <- 0
+full$unknown[is.na(full$unknown)] <- 0
+full$AB[is.na(full$AB)] <- 0
+full$CD[is.na(full$CD)] <- 0
+full$EF[is.na(full$EF)] <- 0
+full$GH[is.na(full$GH)] <- 0
+full$IJ[is.na(full$IJ)] <- 0
+full$KL[is.na(full$KL)] <- 0
+full$MN[is.na(full$MN)] <- 0
+full$OP[is.na(full$OP)] <- 0
+full$QR[is.na(full$QR)] <- 0
+full$ST[is.na(full$ST)] <- 0
+full$UV[is.na(full$UV)] <- 0
+full$WX[is.na(full$WX)] <- 0
+full$YZ[is.na(full$YZ)] <- 0
+```
+
+## Districts
+
+Jeder Kunde sowie jeder Account ist einem Gebiet zugewiesen. Zuerst überprüfen wir, ob es sich dabei immer um das selbe Gebiet handelt.
+
+```{r}
+sum(full$district_id != full$district_id.accounts)
+```
+409 Personen haben ihren Account also in einem anderen Distrikt, als sie zugewiesen sind. Wir müssen also die District-Informationen für beide District-ID's zuweisen. Dies machen wir wieder mit Left-Joins.
+
+```{r}
+full <- left_join(full, districts, by = "district_id")
+
+full <- left_join(full, districts, by = c("district_id.accounts"="district_id"), suffix = c("", ".accounts"))
+```
+
+Unser zusammengesetztes Dataframe sieht nun wie folgt aus:
+
+```{r}
+full
+```
+
+Nun müssen nur noch die Transaktionsdaten zum Dataframe hinzugefügt werden. Diese müssen aber anders zusammengefasst werden.
+
+# Trennung Buyer / Nicht-Buyer
+
+
+Als nächstes werden alle Zeilen mit Kreditkartenkäufern von den Nicht-Käufern getrennt.
+
+
+```{r}
 card_buyers <- full %>% filter(has_card == TRUE)
 
 non_buyers <- full %>% filter(has_card == FALSE)
@@ -831,6 +1006,7 @@ ggplot() +
   scale_x_continuous(limits = c(1, 12))
 ```
 
+
 ```{r}
 # Create the density plot
 ggplot(final_df, aes(x = issued, fill = factor(has_card))) +
@@ -901,6 +1077,10 @@ Als nächstes sollen Modelle trainiert und evaluiert werden. Um die Resultate zu
 set.seed(27)
 ```
 
+```{r}
+final_df
+```
+
 
 ## Funktionen zur Evaluierung von Modellen
 
@@ -911,9 +1091,22 @@ Als Vorbereitung für die Modelle müssen wir unsere Daten zu Trainings- und Tes
 ```{r}
 split_data <- function(df, test_size = 0.2) {
   set.seed(27)
-  split <- createDataPartition(df$has_card, p = 1 - test_size, list = FALSE)
-  train <- df[split, ]
-  test <- df[-split, ]
+  df <- df[order(df$issued, decreasing = FALSE), ]
+  
+  # Get number of rows in the dataframe
+  n_rows <- nrow(df)
+
+# Calculate the number of rows in the test set (20% of the total number of rows)
+n_test_rows <- floor(n_rows * 0.2)
+
+# Create the train and test sets
+train <- head(df, n_rows - n_test_rows)
+test <- tail(df, n_test_rows)
+  
+
+#split <- createDataPartition(df$has_card, p = 1 - test_size, list = FALSE)
+ # train <- df[split, ]
+  #test <- df[-split, ]
   
   return(list(train = train, test = test))
 }
@@ -940,7 +1133,7 @@ Recall (Erinnerung): Der Recall ist der Prozentsatz der tatsächlich positiven W
 F1 score (F1-Wert): Der F1-Wert ist ein Maß für die Qualität von binären Klassifikationen, das die Harmoniesche Mischung von Präzision und Recall darstellt. Es wird berechnet als der Harmoniesche Mittelwert von Präzision und Recall. Ein hoher F1-Wert bedeutet, dass sowohl Präzision als auch Recall hoch sind.
 
 ```{r}
-get_metrics <- function(predictions, true_values) {
+get_metrics <- function(predictions, true_values, model_name) {
   # Calculate accuracy
   accuracy <- sum(predictions == true_values) / length(predictions)
   
@@ -966,7 +1159,7 @@ get_metrics <- function(predictions, true_values) {
   f1 <- 2 * (precision * recall) / (precision + recall)
   
   # Create a data frame of the metrics
-  metrics <- data.frame(accuracy = accuracy, kappa = kappa, matthews = matthews,
+  metrics <- data.frame(model = model_name, accuracy = accuracy, kappa = kappa, matthews = matthews,
                         precision = precision, recall = recall, f1 = f1)
   
   # Return the data frame
@@ -1077,7 +1270,7 @@ find_best_threshold <- function(predictions, actual_values) {
       next
     }
     # Calculate the f1
-    f1 <- get_metrics(predictions_threshold, actual_values)$f1
+    f1 <- get_metrics(predictions_threshold, actual_values, "best threshold")$f1
   
     f1_scores[i] <- f1
   
@@ -1112,7 +1305,7 @@ baseline_data$mean_balance <- rowMeans(final_df[, c("mean_balance_1", "mean_bala
 baseline_data$mean_difference <- rowMeans(final_df[, c("mean_difference_1", "mean_difference_2", "mean_difference_3", "mean_difference_4", 
                                                   "mean_difference_5", "mean_difference_6", "mean_difference_7", "mean_difference_8", 
                                                   "mean_difference_9", "mean_difference_10", "mean_difference_11", "mean_difference_12")])
-baseline_data <- baseline_data[, c("age", "gender", "region", "has_card", "mean_balance", "mean_difference")]
+baseline_data <- baseline_data[, c("age", "gender", "region", "has_card", "mean_balance", "mean_difference", "issued")]
 baseline_data$has_card <- as.factor(baseline_data$has_card)
 ```
 
@@ -1124,36 +1317,49 @@ train <- splits$train
 test <- splits$test
 ```
 
+
 Das Regressionsmodell wird auf den Trainingsdaten trainiert. Wir verwenden die Funktion glm von der Library "stats".
 
 ```{r}
+library(DALEX)
 # Fit the model on the training data
-model <- glm(has_card ~ ., data = train, family = binomial)
+regression_baseline <- glm(has_card ~ ., data = train, family = binomial)
+
+cv_method <- trainControl(method = "cv", number = 10)
+
+
+#regression_baseline <- train(has_card ~ ., data = train, method = "glm", trControl = cv_method, family = "binomial")
+
+regression_baseline_explainer <- explain(regression_baseline, data = train)
 ```
 
 Als nächstes sollen die Predictions gemacht und damit die Metriken erstellt werden. Da die logistische Regression eine Zahl zwischen 0 und 1 zurückgibt, müssen wir anhand eines Thresholds die Werte zu TRUE und FALSE umwandeln. Der Threshold gibt an, ab welchem Wahrscheinlichkeitswert eine Vorhersage als positiv betrachtet wird. Standardmäßig ist der Threshold auf 0.5 gesetzt, was bedeutet, dass alle Wahrscheinlichkeiten größer als 0.5 als positiv und alle Wahrscheinlichkeiten kleiner als 0.5 als negativ betrachtet werden.
 
 ```{r}
 # Make predictions on the test data
-predictions <- predict(model, test, type = "response")
+regression_baseline_predictions <- predict(regression_baseline, test, type = "response")
 
 threshold <- 0.5
-predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+regression_baseline_predictions_threshold <- ifelse(regression_baseline_predictions > threshold, TRUE, FALSE)
 
 
-get_metrics(predictions_threshold, test$has_card)
+regression_baseline_metrics <- get_metrics(regression_baseline_predictions_threshold, test$has_card, "Logistic Regression Baseline")
+metrics_all <- regression_baseline_metrics
+
+regression_baseline_metrics
+
 ```
 
 ```{r}
-plot_confusion_matrix(predictions_threshold, test$has_card)
+plot_confusion_matrix(regression_baseline_predictions_threshold, test$has_card)
 ```
 
 ```{r}
-make_roc_plot_and_get_auc(predictions_threshold, test$has_card)
+make_roc_plot_and_get_auc(regression_baseline_predictions_threshold, test$has_card)
 ```
 
 ```{r}
-plot_feature_importance(model)
+plot_feature_importance(regression_baseline)
 ```
 
 
@@ -1165,7 +1371,7 @@ Der F1 ist eine Zusammenfassung der Precision und der Recall. Wir untersuchen, m
 
 ```{r}
 suppressWarnings({
-  predictions_train <- predict(model, train, type = "response")
+  predictions_train <- predict(regression_baseline, train, type = "response")
   best_threshold <- find_best_threshold(predictions_train, train$has_card)
 })
 ```
@@ -1173,8 +1379,11 @@ suppressWarnings({
 Wie sehen die anderen Metriken mit diesem Threshold aus?
 
 ```{r}
-predictions_threshold <- ifelse(predictions > best_threshold, TRUE, FALSE)
-get_metrics(predictions_threshold, test$has_card)
+regression_baseline_predictions_best_thresholds <- ifelse(regression_baseline_predictions > best_threshold, TRUE, FALSE)
+regression_baseline_best_threshold_metrics <- get_metrics(regression_baseline_predictions_best_thresholds, test$has_card, "Logistic Regression Baseline (Best Threshold)")
+
+metrics_all <- bind_rows(metrics_all, regression_baseline_best_threshold_metrics)
+regression_baseline_best_threshold_metrics
 ```
 
 
@@ -1258,6 +1467,9 @@ final_df_simplified <- final_df_simplified %>%
 ```{r}
 sum(is.na(final_df_simplified))
 ```
+```{r}
+final_df_simplified$issued <- final_df$issued
+```
 
 
 ```{r}
@@ -1268,47 +1480,72 @@ test <- splits$test
 
 ```{r}
 # Fit the model on the training data
-model <- glm(has_card ~ ., data = train, family = binomial)
+regression_all <- glm(has_card ~ ., data = train, family = binomial)
+
+cv_method <- trainControl(method = "cv", number = 10)
+#regression_all <- train(has_card ~ ., data = train, method = regression_all, trControl = cv_method)
+
+regression_all_explainer <- explain(regression_all, data = train)
 ```
 
 ```{r}
 # Make predictions on the test data
-predictions <- predict(model, test, type = "response")
+regression_all_predictions <- predict(regression_all, test, type = "response")
 
 threshold <- 0.5
-predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+regression_all_predictions_threshold <- ifelse(regression_all_predictions > threshold, TRUE, FALSE)
 
-get_metrics(predictions_threshold, test$has_card)
+regression_all_metrics <- get_metrics(regression_all_predictions_threshold, test$has_card, "Logistic Regression (All Data)")
+metrics_all <- bind_rows(metrics_all, regression_all_metrics)
+regression_all_metrics
 ```
 
 ```{r}
-plot_confusion_matrix(predictions_threshold, test$has_card)
+plot_confusion_matrix(regression_all_predictions_threshold, test$has_card)
 ```
 
 ```{r}
-make_roc_plot_and_get_auc(predictions_threshold, test$has_card)
+make_roc_plot_and_get_auc(regression_all_predictions_threshold, test$has_card)
 ```
 
 
 ```{r}
-plot_feature_importance(model)
+plot_feature_importance(regression_all)
 ```
 
 ```{r}
-predictions_train <- predict(model, train, type = "response")
+predictions_train <- predict(regression_all, train, type = "response")
 best_threshold <- find_best_threshold(predictions_train, train$has_card)
 ```
+
+```{r}
+regression_all_predictions_best_thresholds <- ifelse(regression_all_predictions > best_threshold, TRUE, FALSE)
+regression_all_best_threshold_metrics <- get_metrics(regression_all_predictions_best_thresholds, test$has_card, "Logistic Regression All (Best Threshold)")
+
+metrics_all <- bind_rows(metrics_all, regression_all_best_threshold_metrics)
+regression_all_best_threshold_metrics
+```
+
 
 ## Mit nur den beiden wichtigsten Variabeln
 
 ```{r}
-model <- glm(has_card ~ ., data = train %>% select(max_difference_12, max_difference_11, has_card), family = binomial)
-predictions <- predict(model, test, type = "response")
+regression_two <- glm(has_card ~ ., data = train %>% select(max_difference_12, max_difference_11, has_card), family = binomial)
+
+
+cv_method <- trainControl(method = "cv", number = 10)
+#regression_two <- train(has_card ~ ., data = train, method = regression_two, trControl = cv_method)
+
+regression_two_explainer <- explain(regression_two, data = train)
+
+regression_two_predictions <- predict(regression_two, test, type = "response")
 
 threshold <- 0.5
-predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+regression_two_predictions_threshold <- ifelse(regression_two_predictions > threshold, TRUE, FALSE)
 
-get_metrics(predictions_threshold, test$has_card)
+regression_two_metrics <- get_metrics(regression_two_predictions_threshold, test$has_card, "Logistic Regression (Two Variables)")
+metrics_all <- bind_rows(metrics_all, regression_two_metrics)
+regression_two_metrics
 ```
 
 
@@ -1319,23 +1556,30 @@ Für den Decison Tree verwenden wir das Package "rpart".
 
 ```{r}
 
-model <- rpart(has_card ~ ., data = train, method = "class")
+decision_tree <- rpart(has_card ~ ., data = train, method = "class")
+
+cv_method <- trainControl(method = "cv", number = 10)
+#decision_tree <- train(has_card ~ ., data = train, method = decision_tree, trControl = cv_method)
+
+decision_tree_explainer <- explain(decision_tree, data = train)
 
 # Make predictions on the test data (second column is for probability of true)
-predictions <- predict(model, test, type = "prob")[, 2]
+decision_tree_predictions <- predict(decision_tree, test, type = "prob")[, 2]
 
 threshold <- 0.5
-predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+decision_tree_predictions_threshold <- ifelse(decision_tree_predictions > threshold, TRUE, FALSE)
 
-get_metrics(predictions_threshold, test$has_card)
+decision_tree_metrics <- get_metrics(decision_tree_predictions_threshold, test$has_card, "Decision Tree")
+metrics_all <- bind_rows(metrics_all, decision_tree_metrics)
+decision_tree_metrics
 ```
 
 ```{r}
-plot_confusion_matrix(predictions_threshold, test$has_card)
-make_roc_plot_and_get_auc(predictions_threshold, test$has_card)
-predictions_train <- predict(model, train, type = "prob")[, 2]
+plot_confusion_matrix(decision_tree_predictions_threshold, test$has_card)
+make_roc_plot_and_get_auc(decision_tree_predictions_threshold, test$has_card)
+predictions_train <- predict(decision_tree, train, type = "prob")[, 2]
 best_threshold <- find_best_threshold(predictions_train, train$has_card)
-rpart.plot(model)
+rpart.plot(decision_tree)
 ```
 
 
@@ -1352,32 +1596,39 @@ Beim Random Forest muss unsere Zielvariabel noch in einen Faktor umgewandelt wer
 ```{r}
 train$has_card <- as.factor(train$has_card)
 # Fit a random forest model to the training data
-model <- randomForest(has_card ~ ., data = train, method = "class")
+random_forest <- randomForest(has_card ~ ., data = train, method = "class")
+
+cv_method <- trainControl(method = "cv", number = 10)
+#random_forest <- train(has_card ~ ., data = train, method = random_forest, trControl = cv_method)
+
+random_forest_explainer <- explain(random_forest, data = train)
 
 # Make predictions on the test data (second column is for probability of true)
-predictions <- predict(model, test, type = "prob")[, 2]
+random_forest_predictions <- predict(random_forest, test, type = "prob")[, 2]
 
 # Threshold the predicted probabilities
 threshold <- 0.5
-predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+random_forest_predictions_threshold <- ifelse(random_forest_predictions > threshold, TRUE, FALSE)
 
 # Evaluate the model's performance
-get_metrics(predictions_threshold, test$has_card)
+random_forest_metrics <- get_metrics(random_forest_predictions_threshold, test$has_card, "Random Forest")
+metrics_all <- bind_rows(metrics_all, random_forest_metrics)
+random_forest_metrics
 ```
 
 Der Random Forest ist ein wenig besser als der Decision Tree. Als nächstes wollen wir probieren, ob eine Hyperparameteroptimierung unser Resultat noch verbessern kann.
 
 
 ```{r}
-plot_confusion_matrix(predictions_threshold, test$has_card)
-make_roc_plot_and_get_auc(predictions_threshold, test$has_card)
-predictions_train <- predict(model, train, type = "prob")[, 2]
+plot_confusion_matrix(random_forest_predictions_threshold, test$has_card)
+make_roc_plot_and_get_auc(random_forest_predictions_threshold, test$has_card)
+predictions_train <- predict(random_forest, train, type = "prob")[, 2]
 best_threshold <- find_best_threshold(predictions_train, train$has_card)
 ```
 
 ```{r}
-importance_values <- varImp(model)
-importance_values$variable <- rownames(varImp(model)) 
+importance_values <- varImp(random_forest)
+importance_values$variable <- rownames(varImp(random_forest)) 
 importance_values <- importance_values[order(importance_values$Overall, decreasing = TRUE),]
 
 # Wählen Sie die top 10 Merkmale aus
@@ -1390,6 +1641,7 @@ TODO: CHECK if ifelse is correct
 
 ```{r}
 # Initialize empty vector to store f1-scores
+set.seed(27)
 f1_scores <- c()
 
 # Loop through each variable and fit a random forest model
@@ -1409,7 +1661,7 @@ for (i in 1:50) {
   predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
   
   # Calculate f1-score
-  f1 <- get_metrics(predictions_threshold, test$has_card)$f1
+  f1 <- get_metrics(predictions_threshold, test$has_card, "random forest test")$f1
   
   # Append f1-score to vector
   f1_scores <- c(f1_scores, f1)
@@ -1429,17 +1681,24 @@ plot(1:length(f1_scores), f1_scores, type = "l", xlab = "Number of variables", y
 ```{r}
 set.seed(27)
 # Fit a random forest model to the training data
-model <- randomForest(has_card ~ ., data = train %>% select(has_card, importance_values$variable[1:best_index]), method = "class")
+random_forest_important_features <- randomForest(has_card ~ ., data = train %>% select(has_card, importance_values$variable[1:best_index]), method = "class")
+
+cv_method <- trainControl(method = "cv", number = 10)
+#random_forest_important_features <- train(has_card ~ ., data = train, method = random_forest_important_features, trControl = cv_method)
+
+random_forest_important_features_explainer <- explain(random_forest_important_features, data = train)
 
 # Make predictions on the test data (second column is for probability of true)
-predictions <- predict(model, test, type = "prob")[, 2]
+random_forest_important_features_predictions <- predict(random_forest_important_features, test, type = "prob")[, 2]
 
 # Threshold the predicted probabilities
 threshold <- 0.5
-predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+random_forest_important_features_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
 
 # Evaluate the model's performance
-get_metrics(predictions_threshold, test$has_card)
+random_forest_important_features_metrics <- get_metrics(random_forest_important_features_threshold, test$has_card, "Random Forest (most Important Features)")
+metrics_all <- bind_rows(metrics_all, random_forest_important_features_metrics)
+random_forest_important_features_metrics
 ```
 
 
@@ -1456,23 +1715,25 @@ param_grid <- expand.grid(mtry = c(0.1, 1, 10, 100),
                          ntree = c(100, 500, 1000))
 
 # Define the model using the train() function
-model <- randomForest(has_card ~ .,
+random_forest_hyperparameter <- randomForest(has_card ~ .,
                data = train %>% select(has_card, importance_values$variable[1:7]),
                method = "rf",
                tuneGrid = param_grid,
-               trControl = trainControl(method = "cv", number = 5))
+               trControl = trainControl(method = "cv", number = 10))
+
+random_forest_hyperparameter_explainer <- explain(random_forest_hyperparameter, data = train)
 
 # Make predictions on the test data
-predictions <- predict(model, test, type = "prob")[, 2]
+random_forest_hyperparameter_predictions <- predict(random_forest_hyperparameter, test, type = "prob")[, 2]
 
 # Threshold the predicted probabilities
 threshold <- 0.5
-predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+random_forest_hyperparameter_predictions_threshold <- ifelse(random_forest_hyperparameter_predictions > threshold, TRUE, FALSE)
 
-print(model)
+print(random_forest_hyperparameter)
 
 # Evaluate the model's performance
-get_metrics(predictions_threshold, test$has_card)
+get_metrics(random_forest_hyperparameter_predictions_threshold, test$has_card, "Random Forest (Hyperparamter Optimization")
 ```
 
 
@@ -1496,33 +1757,99 @@ control <- rfeControl(functions = rfFuncs,
                       repeats = 5)
 
 # Perform RFE
-model <- rfe(x = train %>% select(-has_card), y = train$has_card,
+rfe <- rfe(x = train %>% select(-has_card), y = train$has_card,
              sizes = c(1:19, seq(from = 20, to = ncol(train), by = 10)),
              rfeControl = control)
 
 # Extract the selected features
-selected_features <- model$optVariables
+selected_features <- rfe$optVariables
 
-print(model)
+print(rfe)
 }
 ```
 
 ```{r}
 if (FALSE) {
 # Fit a random forest model using the selected features
-model <- randomForest(has_card ~ ., data = train[c(selected_features, "has_card")], method = "class")
+random_forest_rfe <- randomForest(has_card ~ ., data = train[c(selected_features, "has_card")], method = "class")
+
+cv_method <- trainControl(method = "cv", number = 10)
+random_forest_rfe <- train(has_card ~ ., data = train, method = random_forest_rfe, trControl = cv_method)
+
+random_forest_rfe_explainer <- explain(random_forest_rfe, data = train)
 
 # Make predictions on the test data
-predictions <- predict(model, test, type = "prob")[, 2]
+random_forest_rfe_predictions <- predict(random_forest_rfe, test, type = "prob")[, 2]
 
 # Threshold the predicted probabilities
 threshold <- 0.5
-predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+random_forest_rfe_predictions_threshold <- ifelse(random_forest_rfe_predictions > threshold, TRUE, FALSE)
 
 # Evaluate the model's performance
-get_metrics(predictions_threshold, test$has_card)
+random_forest_rfe_metrics <- get_metrics(random_forest_rfe_predictions_threshold, test$has_card, "Random Forest (RFE)")
+metrics_all <- bind_rows(metrics_all, random_forest_rfe_metrics)
+random_forest_rfe_metrics
 }
 ```
+
+```{r}
+metrics_all
+```
+
+```{r}
+ggplot(metrics_all, aes(x = model, y = f1)) + geom_point() + geom_line(aes(group = 1)) + ylim(0.5,1)
+
+```
+
+
+```{r}
+# Next, create a plot using ggplot() and specify the dataframe as the first argument
+ggplot(data = metrics_all, aes(x = model)) +
+
+# Use geom_line() to create a line plot, and map the F1 metric to the y-axis with aes()
+geom_line(aes(y = f1))
+
+# Finally, use labs() to label the x- and y-axes and give the plot a title
+labs(x = "Model", y = "F1 value", title = "Model performance (F1)")
+```
+
+
+```{r}
+# Next, create a plot using ggplot() and specify the dataframe as the first argument
+ggplot(data = metrics_all, aes(x = model)) +
+
+# Use geom_line() to create a line plot, and map the different metrics to the y-axis and the color aesthetic with aes()
+geom_line(aes(y = accuracy, color = "Accuracy")) +
+geom_line(aes(y = kappa, color = "Kappa")) +
+geom_line(aes(y = matthews, color = "Matthews")) +
+geom_line(aes(y = precision, color = "Precision")) +
+geom_line(aes(y = recall, color = "Recall")) +
+geom_line(aes(y = f1, color = "F1"))
+
+# Use scale_color_manual() to specify the colors for each metric
+scale_color_manual(values = c("Accuracy" = "blue", "Kappa" = "red", "Matthews" = "green", "Precision" = "purple", "Recall" = "orange", "F1" = "pink"))
+
+# Finally, use labs() to label the x- and y-axes and give the plot a title
+labs(x = "Model", y = "Metric value", title = "Model performance")
+```
+
+
+```{r}
+#comparison <- compare(regression_baseline_explainer, regression_all_explainer, decision_tree_explainer, random_forest_explainer)
+
+vip_baseline <- variable_importance(regression_baseline_explainer, n_sample = -1, loss_function = loss_root_mean_square) 
+vip_regression_all  <- variable_importance(regression_all_explainer, n_sample = -1, loss_function = loss_root_mean_square)
+vip_decision_tree <- variable_importance(decision_tree_explainer, n_sample = -1, loss_function = loss_root_mean_square)
+vip_random_forest <- variable_importance(random_forest_explainer, n_sample = -1, loss_function = loss_root_mean_square)
+
+plot(vip_baseline, vip_regression_all, vip_decision_tree, vip_random_forest, max_vars = 10)
+```
+
+
+```{r}
+fehler
+```
+
 
 # XGBoost
 
@@ -1553,24 +1880,27 @@ param <- list(max_depth = 100, eta = 0.1, nthread = 2)
 
 
 # Train the model
-model <- xgboost(data = train_preds, label = train_labels, nrounds = 1000, objective = "binary:logistic", verbose = 0, maximize = "F1", params = param)
+xg_boost <- xgboost(data = train_preds, label = train_labels, nrounds = 1000, objective = "binary:logistic", verbose = 0, maximize = "F1", params = param)
 
-print(model)
+print(xg_boost)
 
 # Make predictions on the test data
-predictions <- predict(model, test_preds)
+xg_boost_predictions <- predict(xg_boost, test_preds)
 
 # Threshold the predicted probabilities
 threshold <- 0.5
-predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+xg_boost_predictions_threshold <- ifelse(xg_boost_predictions > threshold, TRUE, FALSE)
 
 # Evaluate the model's performance
-get_metrics(predictions_threshold, test_labels)
+xg_boost_metrics <- get_metrics(xg_boost_predictions_threshold, test_labels, "XGBoost")
+metrics_all <- bind_rows(metrics_all, xg_boost_metrics)
+xg_boost_metrics
 ```
 
 ## Hyperparameteroptimierung
 
 ```{r}
+if (FALSE) {
 # Set the seed for reproducibility
 set.seed(27)
 
@@ -1604,20 +1934,30 @@ param_grid <- expand.grid(nrounds = c(1000, 2000, 5000),
                          subsample = c(0.5, 0.8, 1))
 
 # Train the model using caret's train() function
-model <- train(x = train_preds, y = train_labels, method = "xgbTree", trControl = trainControl(method = "cv", number = 5), tuneGrid = param_grid, metric = "F", verbose = FALSE, verbosity = 0)
+xg_boost_hyperparameter <- train(x = train_preds, y = train_labels, method = "xgbTree", trControl = trainControl(method = "cv", number = 10), tuneGrid = param_grid, metric = "F", verbose = FALSE, verbosity = 0)
 
 
 print(model)
 
 # Make predictions on the test data
-predictions <- predict(model, test_preds)
+xg_boost_hyperparameter_predictions <- predict(xg_boost_hyperparameter, test_preds)
 
 # Threshold the predicted probabilities
 threshold <- 0.5
-predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
+xg_boost_hyperparameter_predictions_threshold <- ifelse(xg_boost_hyperparameter_predictions > threshold, TRUE, FALSE)
 
 # Evaluate the model's performance
-get_metrics(predictions_threshold, test_labels)
+xg_boost_hyperparamter_metrics <- get_metrics(xg_boost_hyperparameter_predictions_threshold, test_labels)
+metrics_all <- bind_rows(metrics_all, xg_boost_hyperparamter_metrics)
+xg_boost_hyperparamter_metrics
+}
+```
+
+
+# Übersicht über alle Modelle
+
+```{r}
+metrics_all
 ```
 
 
