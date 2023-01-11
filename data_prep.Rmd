@@ -294,7 +294,7 @@ df <- df %>%
   summarize(transactions = {
     
     # Die Different der Transaktion zur Vorherigen wird mittels Typ ausgelesen
-    difference <- ifelse(type == "credit", amount, amount * -1)
+    difference <- ifelse(type == "withdrawal", amount, amount * -1)
     
     # Balance ist der Kontostand nach der Transaktion, mittels difference wird der Kontostand vor Transaktion ermittelt.
     prev_balance <- balance - difference
@@ -719,7 +719,7 @@ month_counts <- get_incomplete_buyers(summary_df)
 print(paste("Anzahl Kunden mit weniger als 12 Monaten:", dim(month_counts)[1]))
 ```
 
-Jeder Kreditkartenkäufer hat also wirklich 12 Monate. Als nächstes wollen wir diese zwölf Rows pro Kunde zu einer Row umwandeln. Dafür nummerieren wir zunächst die Monate pro Kreditkartenkäufer von 1 bis 12 durch.
+Jeder Kreditkartenkäufer hat also wirklich 12 Monate. Als nächstes wollen wir diese zwölf Rows pro Kunde zu einer Row umwandeln. Dafür nummerieren wir zunächst die Monate pro Kreditkartenkäufer von 1 bis 12 durch. Dabei ist der Monat 12 der letzte Monat vor dem Kaufdatum (abgesehen vom Lag-Monat).
 
 ```{r}
 set_month_ids <- function(summary_df)
@@ -884,6 +884,13 @@ final_df$crimes_95 <- as.numeric(final_df$crimes_95)
 final_df$crimes_95.accounts <- as.numeric(final_df$crimes_95.accounts)
 ```
 
+Bei den berechneten Standardabweichung kommt es auch zu NA-Werten, da es Monate mit nur einer Transaktion gibt und daraus eine Null-Divison entsteht. Diese fehlenden Werte werden durch 0 ersetzt.
+
+```{r}
+std_cols <- colnames(final_df %>% select(starts_with("std")))
+final_df[,std_cols] <- final_df[,std_cols] %>% replace(is.na(.), 0)
+```
+
 Unser finales Dataframe sieht wie folgt aus:
 
 ```{r}
@@ -894,155 +901,122 @@ Der Datensatz enthält 1412 Kunden mit 226 verschiedenen Variabeln. Die Hälfte 
 
 # EDA
 
-```{r}
-colSums(is.na(final_df))[colSums(is.na(final_df)) > 0]
-```
+Nun wollen wir unser Dataframe noch ein wenig genauer unter die Luppe nehmen. 
 
-Bei den standard deviations exisiteren nun viele NA's, da bei den imputierten Monaten nur eine Transaktion pro Monat existiert und dadurch durch n-1 = 0 dividiert wird. Diese NA's werden mit 0 imputiert.
-
-```{r}
-std_cols <- colnames(final_df %>% select(starts_with("std")))
-final_df[,std_cols] <- final_df[,std_cols] %>% replace(is.na(.), 0)
-colSums(is.na(final_df))[colSums(is.na(final_df)) > 0]
-```
-
-
+## Anzahl Kreditkarten-Käufer und Nicht-Käufer
 
 ```{r}
 ggplot(data = final_df, aes(x = has_card)) +
   geom_bar(aes(y = after_stat(count)), stat = "count", fill = "steelblue") +
-  labs(x = "Has Card", y = "Frequency")
+  labs(x = "Ist Käufer", y = "Anzahl", title = "Anzahl Kreditkarten-Käufer und Nicht-Käufer")
 ```
 
+Da wir für jeden Kreditkartenkäufer genau einen Käufer suchen, ist der Datensatz ausgeglichen: Es hat gleiche viele Nicht-Käufer wie Käufer.
+
+## Verteilung der Kaufdaten
+
 ```{r}
-# Durchschnittliche Werte für has_card == TRUE berechnen
+ggplot(final_df, aes(x = issued, fill = factor(has_card))) +
+  geom_density(alpha = 0.5) +
+  labs(x = "Kaufdatum", y = "Dichte", fill = "Has Card", title = "Verteilung der Kaufdaten") +
+  scale_x_date(limits = range(final_df$issued))
+```
+
+Dieses Diagramm zeigt die Verteilung der Kaufdaten der Kunden. Da das Kaufdatum des Nicht-Käufers auf das des Käufers gesetzt wird, sind die Verteilungen der beiden Klassen hier deckungsgleich. In den Anfangsjahren des Datensatzes gibt es noch sehr wenige Kreditkartenkäufe, die Tendenz ist jedoch steigend. Ab 1996 erleben die Kreditkartenkäufe einen steilen Aufschwung, welcher Mitte 1998 zu seinem Höhepunkt kommt. Danach werden wieder weniger Käufe getätigt.
+
+## Entwicklung der Vermögen
+
+Als nächstes wollen wir das Vermögen (balance) der Kunden anschauen. Wir beobachten, ob sich das Vermögen von Kunden und nicht Kunden bezüglich Höhe und Entwicklung unterscheidet.
+
+```{r}
 averages_true <- colMeans(final_df[final_df$has_card == TRUE,
                                    c("mean_balance_1", "mean_balance_2", "mean_balance_3",
                                      "mean_balance_4", "mean_balance_5", "mean_balance_6",
                                      "mean_balance_7", "mean_balance_8", "mean_balance_9",
                                      "mean_balance_10", "mean_balance_11", "mean_balance_12")])
 
-# Durchschnittliche Werte für has_card == FALSE berechnen
 averages_false <- colMeans(final_df[final_df$has_card == FALSE,
                                     c("mean_balance_1", "mean_balance_2", "mean_balance_3",
                                       "mean_balance_4", "mean_balance_5", "mean_balance_6",
                                       "mean_balance_7", "mean_balance_8", "mean_balance_9",
                                       "mean_balance_10", "mean_balance_11", "mean_balance_12")])
 
-# Line Plot erstellen
 ggplot() +
-  geom_line(aes(x = 1:12, y = averages_true), color = "steelblue") +
-  geom_line(aes(x = 1:12, y = averages_false), color = "red") +
-  labs(x = "Month", y = "Average Mean Balance") +
-  scale_color_manual(name = "", values = c("steelblue" = "Buyers", "red" = "Non Buyers")) +
+  geom_line(aes(x = 1:12, y = averages_true, color = "Käufer")) +
+  geom_line(aes(x = 1:12, y = averages_false, color = "Nicht-Käufer")) +
+  labs(x = "Monat", y = "Durchschnittliches Vermögen", title = "Vermögensentwicklung") +
+  scale_color_manual(name = "Kunden", values = c("Käufer" = "steelblue", "Nicht-Käufer" = "red")) +
   scale_x_continuous(limits = c(1, 12)) +
-  scale_y_continuous(limits = c(0, NA))
+  scale_y_continuous(limits = c(0, NA)) +
+  theme(legend.position = "right")
 ```
+
+Kreditkartenkäufer haben im Schnitt ein höheres Vermögen als Nicht-Käufer. Das Vermögen aller Kunden steigt tendenziell, wobei das der Käufer steiler als das der Nicht-Käufer steigt. Ab dem siebten Monat scheint aber auch diese Vermögenssteigerung abzuflachen.
+
+## Anzahl Transaktionen
+
+Als nächstes wollen wir untersuchen, ob sich Kreditkartenkäufer und Nicht-Käufer durch die Anzahl getätigter Transaktionen unterscheiden. Dafür schauen wir die durchschnittliche Anzahl Transaktionen für beide Klassen an.
+
 ```{r}
-# Durchschnittliche Werte für has_card == TRUE berechnen
-averages_true <- colMeans(final_df[final_df$has_card == TRUE,
-                                   c("mean_difference_1", "mean_difference_2", "mean_difference_3",
-                                     "mean_difference_4", "mean_difference_5", "mean_difference_6",
-                                     "mean_difference_7", "mean_difference_8", "mean_difference_9",
-                                     "mean_difference_10", "mean_difference_11", "mean_difference_12")])
+avg_sum_negative_true <- mean(rowSums(final_df[final_df$has_card == TRUE, grep("count_negative_difference", colnames(final_df))]))
+avg_sum_negative_false <- mean(rowSums(final_df[final_df$has_card == FALSE, grep("count_negative_difference", colnames(final_df))]))
 
-# Durchschnittliche Werte für has_card == FALSE berechnen
-averages_false <- colMeans(final_df[final_df$has_card == FALSE,
-                                    c("mean_difference_1", "mean_difference_2", "mean_difference_3",
-                                      "mean_difference_4", "mean_difference_5", "mean_difference_6",
-                                      "mean_difference_7", "mean_difference_8", "mean_difference_9",
-                                      "mean_difference_10", "mean_difference_11", "mean_difference_12")])
+avg_sum_positive_true <- mean(rowSums(final_df[final_df$has_card == TRUE, grep("count_positive_difference", colnames(final_df))]))
+avg_sum_positive_false <- mean(rowSums(final_df[final_df$has_card == FALSE, grep("count_positive_difference", colnames(final_df))]))
 
-# Line Plot erstellen
+avg_sum_both_true = avg_sum_negative_true + avg_sum_positive_true
+avg_sum_both_false = avg_sum_negative_false + avg_sum_positive_false
+
 ggplot() +
-  geom_line(aes(x = 1:12, y = averages_true), color = "steelblue") +
-  geom_line(aes(x = 1:12, y = averages_false), color = "red") +
-  labs(x = "Month", y = "Average Mean Difference") +
-  scale_color_manual(name = "", values = c("steelblue" = "Buyers", "red" = "Non Buyers")) +
-  scale_x_continuous(limits = c(1, 12))
+  geom_bar(aes(x = c("Käufer", "Nicht-Käufer"), y = c(avg_sum_both_true, avg_sum_both_false)), stat = "identity", fill = c("steelblue", "red")) +
+  labs(x = "", y = "Durchschnittliche Anzahl Transaktionen", title = "Durchschnittliche Anzahl Transaktionen im ganzen Rollup-Fenster")
 ```
 
+Kreditkartenkäufer haben also im Schnitt mehr Transaktionen getätigt als Nicht-Käufer im Rollup-Fenster. Doch wie Verhält es sich, wenn wir Anzahl positive und Anzahl negative Transaktionen separat betrachten?
 
 ```{r}
-# Create the density plot
-ggplot(final_df, aes(x = issued, fill = factor(has_card))) +
-  geom_density(alpha = 0.5) +
-  labs(x = "Issued Date", y = "Density", fill = "Has Card") +
-  scale_x_date(limits = range(final_df$issued))
-```
-
-```{r}
-# Calculate the average sum of count_negative_difference for has_card == TRUE
-avg_sum_true <- mean(rowSums(final_df[final_df$has_card == TRUE, grep("count_negative_difference", colnames(final_df))]))
-
-# Calculate the average sum of count_negative_difference for has_card == FALSE
-avg_sum_false <- mean(rowSums(final_df[final_df$has_card == FALSE, grep("count_negative_difference", colnames(final_df))]))
-
-# Create the bar plot
 ggplot() +
-  geom_bar(aes(x = c("TRUE", "FALSE"), y = c(avg_sum_true, avg_sum_false)), stat = "identity", fill = "steelblue") +
-  labs(x = "Has Card", y = "Average Sum of Count Negative Difference")
+  geom_bar(aes(x = c("Käufer Ausgaben", "Nicht-Käufer Ausgaben", "Käufer Einnahmen", "Nicht-Käufer Einnahmen"), y = c(avg_sum_negative_true, avg_sum_negative_false, avg_sum_positive_true, avg_sum_positive_false)), stat = "identity", fill = c("steelblue", "red", "steelblue", "red")) +
+  labs(x = "", y = "Durchschnittliche Anzahl Transaktionen", title = "Durchschnittliche Anzahl Transaktionen im ganzen Rollup-Fenster")
 ```
 
-```{r}
-# Calculate the average sum of count_negative_difference for has_card == TRUE
-avg_sum_true <- mean(rowSums(final_df[final_df$has_card == TRUE, grep("count_positive_difference", colnames(final_df))]))
+Beide Klassen haben mehr positive Transaktionen als negative, wobei Käufer bei positiven sowie bei negativen durchschnittlich mehr haben. Bei den Einnahmen ist der Unterschied ein wenig höher als bei den Ausgaben.
 
-# Calculate the average sum of count_negative_difference for has_card == FALSE
-avg_sum_false <- mean(rowSums(final_df[final_df$has_card == FALSE, grep("count_positive_difference", colnames(final_df))]))
+## Darlehen
 
-# Create the bar plot
-ggplot() +
-  geom_bar(aes(x = c("TRUE", "FALSE"), y = c(avg_sum_true, avg_sum_false)), stat = "identity", fill = "steelblue") +
-  labs(x = "Has Card", y = "Average Sum of Count Positive Difference")
-```
-
-```{r}
-card_buyers_with_loan <- final_df[final_df$has_card & !is.na(final_df$amount),]
-card_buyers_without_loan <- final_df[final_df$has_card & is.na(final_df$amount),]
-non_buyers_with_loan <- final_df[!final_df$has_card & !is.na(final_df$amount),]
-non_buyers_without_loan <- final_df[!final_df$has_card & is.na(final_df$amount),]
-
-# Calculate the number of people in each group
-card_buyers_with_loan_count <- length(card_buyers_with_loan$has_card)
-card_buyers_without_loan_count <- length(card_buyers_without_loan$has_card)
-non_buyers_with_loan_count <- length(non_buyers_with_loan$has_card)
-non_buyers_without_loan_count <- length(non_buyers_without_loan$has_card)
-
-# Create the bar plot
-ggplot() +
-  geom_bar(aes(x = c("Card buyers with loan", "Card buyers without loan", "Non-buyers with loan", "Non-buyers without loan"), y = c(card_buyers_with_loan_count, card_buyers_without_loan_count, non_buyers_with_loan_count, non_buyers_without_loan_count)), stat = "identity") +
-  labs(x = "Group", y = "Number of People")
-```
-
-
-```{r}
-# Create the bar plot
-ggplot(final_df, aes(x = region, fill = factor(has_card))) +
-  geom_bar(position = "dodge") +
-  labs(x = "Region", y = "Number of People", fill = "Has Card")
-```
-
-
-
-# Modelle
-
-Als nächstes sollen Modelle trainiert und evaluiert werden. Um die Resultate zu reproduzieren, wird hier ein initialier seed gesetzt.
-
-```{r}
-set.seed(27)
-```
+Hier soll untersucht werden, ob Käufer mehr Darlehen bei der Bank aufnehmen als Nicht-Käufer.
 
 ```{r}
 final_df
 ```
 
 
+```{r}
+card_buyers_with_loan <- final_df[final_df$has_card & final_df$status != "no_loan",]
+non_buyers_with_loan <- final_df[!final_df$has_card & final_df$status != "no_loan",]
+
+card_buyers_with_loan_count <- length(card_buyers_with_loan$has_card)
+non_buyers_with_loan_count <- length(non_buyers_with_loan$has_card)
+
+ggplot() +
+  geom_bar(aes(x = c("Käufer", "Nicht-Käufer"), y = c(card_buyers_with_loan_count, non_buyers_with_loan_count)), stat = "identity", fill = c("steelblue", "red")) +
+  labs(x = "", y = "Anzahl", title = "Anzahl Kunden mit Darlehen")
+```
+
+Fast doppelt so viele Käufer wie Nicht-Käufer haben ein Darlehen aufgenommen.
+
+# Modelle
+
+Als nächstes wollen wir Modelle trainieren, welche Anhand der Merkmale der Kunden vorhersagen sollen, ob ein Kunde ein Käufer ist oder nicht. Dieses Modell soll dann gebraucht werden, um zu erkennen, welche bestehenden Kunden ohne Kreditkarte am ehesten eine kaufen würden. 
+
 ## Funktionen zur Evaluierung von Modellen
+
+Damit die Evaluierung von Modellen nicht redundanten Code enthält, wird hier versucht, Funktionen zu erstellen, welche bei verschiedenen Modellen gebraucht werden können.
 
 ### Train-Test-Split
 
 Als Vorbereitung für die Modelle müssen wir unsere Daten zu Trainings- und Testdaten unterteilen. Dafür erstellen wir eine Funktion, welche auf verschiedenen Varianten des Datensatz gebraucht werden kann.
+
 
 ```{r}
 split_data <- function(df, test_size = 0.2) {
@@ -1055,6 +1029,8 @@ split_data <- function(df, test_size = 0.2) {
 # Calculate the number of rows in the test set (20% of the total number of rows)
 n_test_rows <- floor(n_rows * 0.2)
 
+df$issued <- NULL
+
 # Create the train and test sets
 train <- head(df, n_rows - n_test_rows)
 test <- tail(df, n_test_rows)
@@ -1063,8 +1039,26 @@ test <- tail(df, n_test_rows)
 #split <- createDataPartition(df$has_card, p = 1 - test_size, list = FALSE)
  # train <- df[split, ]
   #test <- df[-split, ]
+
+# create cv folds
+  train_sets <- c()
+  val_sets <- c()
+
+  set.seed(27)
+  cv_folds <- vfold_cv(train, v = 10)
+  # Iteriere über alle Folds
+  for (i in 1:nrow(cv_folds)) 
+  {
+    # Wähle den aktuellen Trainings- und Validierungsdatensatz aus
+    train_set <- cv_folds$splits[[i]] %>% analysis()
+    val_set <- cv_folds$splits[[i]] %>% assessment()
   
-  return(list(train = train, test = test))
+    # Speichere den aktuellen Trainings- und Validierungsdatensatz in den Listen
+    train_sets[[i]] <- train_set
+    val_sets[[i]] <- val_set
+  }
+  
+  return(list(train = train, test = test, cv_folds = cv_folds, train_sets = train_sets, val_sets = val_sets))
 }
 ```
 
@@ -1169,43 +1163,6 @@ make_roc_plot_and_get_auc <- function(predictions, true_values)
 }
 ```
 
-
-### Feature Importance
-
-Um die Feature Importance genauer zu untersuchen, definieren wir eine Funktion, welche für ein Modell die Feature Importance berechnet und die Top 10 Features in einem Barplot ausgibt.Die Funktion plot_feature_importance() nimmt als Eingabeparameter ein maschinelles Lernmodell und plottet die Feature-Importance des Modells als Barplot. Die Funktion unterscheidet drei Arten von Modellen: Logistische Regressionen, Entscheidungsbäume und Random Forest. Für jede Art von Modell wird die Feature-Importance auf eine spezifische Art und Weise berechnet. Anschließend werden die Feature-Importance-Werte und die Namen der Features absteigend sortiert, wobei nur die 10 wichtigsten Features berücksichtigt werden. Der Barplot zeigt dann die Feature-Importance-Werte für die entsprechenden Features an. Der Titel des Plots lautet "Feature Importance" und die y-Achse ist mit "Importance" beschriftet. Die Namen der Features werden rotiert angezeigt, um Platz zu sparen, und die Farben der einzelnen Features sind unterschiedlich.
-
-```{r}
-plot_feature_importance <- function(model) {
-  
-  # Logistische Regression
-  if (class(model)[1] == "glm") {
-    importance <- abs(coef(model)[-1])
-    names <- names(importance)
-    
-    # Sort feature importance and names in decreasing order
-  importance <- head(importance[order(importance, decreasing = TRUE)], 10)
-  names <- names[order(importance, decreasing = TRUE)]
-  } 
-  
-  # Random Forest
-  else if (class(model)[1] == "randomForest") {
-    importance <- model$importance
-    names <- row.names(importance)
-  } 
-  
-  # Unrecognized model
-  else {
-    stop("Unrecognized model")
-  }
-  
-  
-  
-  # Plot feature importance
-  barplot(importance, names.arg = names, las = 2, cex.names = 0.6,
-          main = "Feature Importance", xlab = "", ylab = "Importance")
-}
-```
-
 ### Threshold Plot
 
 ```{r}
@@ -1247,11 +1204,17 @@ find_best_threshold <- function(predictions, actual_values) {
 }
 ```
 
-# Baseline Modell
+
+
+## Vorgehen
+
+Um ein geeignets Modell zu finden, werden wir verschiedene Modell-Alogirthmen auf den Trainingsdaten anzuwenden und versuchen, diese zu optimieren. Wir starten dabei mit einem vorgegebenen Baseline Modell. Jedes Modell schauen wir kurz individuell an. Am Schluss werden die verschiedenen Modelle nochmals gesamthaft miteinander verglichen. Dabei schauen wir verschiedene Metriken, Top-N-Listen, Feature-Importance und weitere Informationen wie die ROC-Kurve oder Konfusionsmatrizen. Diese Informationen erhalten wir über 10-fache-Kreuzvalidierung. Wir trainieren also jedes Modell 10 Mal mit verschiedenen 90% der Trainingsdaten und berechnen unsere Metriken und weiteren Informationen auf den restlichen 10%.
+
+Doch welche Metrik in unserer Liste ist die relevanteste für uns? Beim Modell geht es darum, Kunden zu finden, welche am ehesten eine Kreditkarte kaufen würden. Diesen Kunden würden dann für die Bank interessant werden und eine gewisse Massnahme würde ergriffen werden, sei es das Schicken einer Werbung  oder das Unterbreiten eines Angebots. Da dies mit einem zeitlichen Aufwand verbunden ist und Kunden, welche ein solches Angebot oder eine Werbung bekommen aber kein Interesse haben, eher genervt davon werden würden, sollen die vom Modell als positiv klassifizierten Fälle möglichst tatsächlich positiv sein. Daher schauen wir bei den Modellen vor allem auf die Precision.
+
+### Baseline Modell
 
 Als erstes soll eine logistische Regression mit den Informationen Alter, Geschlecht, Domizilregion, Vermögen (balance-Schnitt über alle Monate) und Umsatz (difference-Schnitt über alle Monate) als Baseline Modell erstellt werden.Dafür müssen wir kurz ein neues Dataframe erstellen.
-
-
 
 ```{r}
 baseline_data <- final_df
@@ -1271,83 +1234,51 @@ Darauf wird ein Train-Test-Split mit 80% Trainingsdaten und 20% Testdaten gebrau
 splits <- split_data(baseline_data, test_size = 0.2)
 train <- splits$train
 test <- splits$test
+train_sets <- splits$train_sets
+val_sets <- splits$val_sets
 ```
 
-
-Das Regressionsmodell wird auf den Trainingsdaten trainiert. Wir verwenden die Funktion glm von der Library "stats".
-
-```{r}
-library(DALEX)
-# Fit the model on the training data
-regression_baseline <- glm(has_card ~ ., data = train, family = binomial)
-
-cv_method <- trainControl(method = "cv", number = 10)
-
-
-#regression_baseline <- train(has_card ~ ., data = train, method = "glm", trControl = cv_method, family = "binomial")
-
-regression_baseline_explainer <- explain(regression_baseline, data = train)
-```
-
-Als nächstes sollen die Predictions gemacht und damit die Metriken erstellt werden. Da die logistische Regression eine Zahl zwischen 0 und 1 zurückgibt, müssen wir anhand eines Thresholds die Werte zu TRUE und FALSE umwandeln. Der Threshold gibt an, ab welchem Wahrscheinlichkeitswert eine Vorhersage als positiv betrachtet wird. Standardmäßig ist der Threshold auf 0.5 gesetzt, was bedeutet, dass alle Wahrscheinlichkeiten größer als 0.5 als positiv und alle Wahrscheinlichkeiten kleiner als 0.5 als negativ betrachtet werden.
+Das Regressionsmodell wird auf den Trainingsdaten trainiert. Wir verwenden die Funktion glm von der Library "stats". Bei jedem Modell müssen die Predictions gemacht und damit die Metriken erstellt werden. Da die logistische Regression eine Zahl zwischen 0 und 1 zurückgibt, müssen wir anhand eines Thresholds die Werte zu TRUE und FALSE umwandeln. Der Threshold gibt an, ab welchem Wert eine Vorhersage als positiv betrachtet wird. Standardmäßig ist der Threshold auf 0.5 gesetzt, was bedeutet, dass alle Kunden mit einem Wert grösser als 0.5 als Kartenkäufer betrachtet werden.Die Werte für jede Validierung werden in einer Liste gespeichert. Als erstes wollen wir uns die durchschnittlichen Metriken anschauen.
 
 ```{r}
-# Make predictions on the test data
-regression_baseline_predictions <- predict(regression_baseline, test, type = "response")
+regression_baseline_metrics <- list()
+regression_baseline_predictions <- list()
+regression_baseline_predictions_threshold <- list()
 
-threshold <- 0.5
-regression_baseline_predictions_threshold <- ifelse(regression_baseline_predictions > threshold, TRUE, FALSE)
+for(i in 1:length(val_sets)) {
+  
+  regression_baseline <- glm(has_card ~ ., data = train_sets[[i]], family = binomial)
+  
+  regression_baseline_predictions[[i]] <- predict(regression_baseline, val_sets[[i]], type = "response")
+  
+  threshold <- 0.5
+  
+  regression_baseline_predictions_threshold[[i]] <- ifelse(regression_baseline_predictions[[i]] > threshold, TRUE, FALSE)
 
+  regression_baseline_metrics[[i]] <- get_metrics(regression_baseline_predictions_threshold[[i]], val_sets[[i]]$has_card, "Logistic Regression Baseline")
+  
+}
 
-regression_baseline_metrics <- get_metrics(regression_baseline_predictions_threshold, test$has_card, "Logistic Regression Baseline")
+regression_baseline_metrics <- do.call("rbind", regression_baseline_metrics)
 metrics_all <- regression_baseline_metrics
 
-regression_baseline_metrics
+colMeans(regression_baseline_metrics %>% select(-model))
 
+#regression_baseline_explainer <- explain(regression_baseline, data = train)
 ```
+
+Um die Konfusionsmatrix anzuzeigen berechnen wir den Schnitt des Wertes der logistischen Regression für jeden Kunden 
 
 ```{r}
-plot_confusion_matrix(regression_baseline_predictions_threshold, test$has_card)
-```
-```{r}
-#
+#plot_confusion_matrix(regression_baseline_predictions_threshold, test$has_card)
 ```
 
 
 ```{r}
-make_roc_plot_and_get_auc(regression_baseline_predictions, test$has_card)
+#make_roc_plot_and_get_auc(regression_baseline_predictions, test$has_card)
 ```
 
-```{r}
-plot_feature_importance(regression_baseline)
-```
-
-
-## Threshold 
-
-Der Threshold-Wert könnte aber angepasst werden. Je nach Veränderung werden die verschiedenen Metriken besser oder schlechter. Die Frage dabei ist, ob wir eher mehr falsche Positivvorhersagen oder Negativvorhersagen wollen. Wenn wir den Threshold senken, wird bspw. der Recall höher. Wenn wir den Threshold erhöhen, wird die Precision höher. Es ist aber nicht sinnvoll, anhand des Thresholds diese beiden Metriken zu maximieren, da es bei beiden fast keine Positiven bzw. Negative Predictions mehr gibt. 
-
-Der F1 ist eine Zusammenfassung der Precision und der Recall. Wir untersuchen, mit welchem Threshold der höchste F1-Score erzielt werden kann. Wir probieren den Threshold auf den Trainingsdaten zu optmieren.
-
-```{r}
-suppressWarnings({
-  predictions_train <- predict(regression_baseline, train, type = "response")
-  best_threshold <- find_best_threshold(predictions_train, train$has_card)
-})
-```
-
-Wie sehen die anderen Metriken mit diesem Threshold aus?
-
-```{r}
-regression_baseline_predictions_best_thresholds <- ifelse(regression_baseline_predictions > best_threshold, TRUE, FALSE)
-regression_baseline_best_threshold_metrics <- get_metrics(regression_baseline_predictions_best_thresholds, test$has_card, "Logistic Regression Baseline (Best Threshold)")
-
-metrics_all <- bind_rows(metrics_all, regression_baseline_best_threshold_metrics)
-regression_baseline_best_threshold_metrics
-```
-
-
-# Regressionsmodell mit allen Daten
+### Regressionsmodell mit allen Daten
 
 Nun soll dieses Baseline-Modell verbessert werden. Als erstes probieren wir, das gleiche Modell (Logistische Regression) mit mehr Input-Parametern zu trainieren. 
 
@@ -1424,9 +1355,14 @@ final_df_simplified <- final_df_simplified %>%
   mutate_if(is.character, list(~ if_else(is.na(.), mode(.), .)))
 ```
 
+Wir überprüfen nochmals, ob es keine fehlenden Werte mehr gibt.
+
 ```{r}
 sum(is.na(final_df_simplified))
 ```
+
+Da das Kaufdatum für den Split benötigt wird aber vorher entfernt wurde, da es mehr als 10 verschiedene Ausprägungen annehmen kann, fügen wir es hier nochmals zum neuen Datensatz hinzu.
+
 ```{r}
 final_df_simplified$issued <- final_df$issued
 ```
@@ -1436,110 +1372,90 @@ final_df_simplified$issued <- final_df$issued
 splits <- split_data(final_df_simplified, test_size = 0.2)
 train <- splits$train
 test <- splits$test
+train_sets <- splits$train_sets
+val_sets <- splits$val_sets
 ```
 
 ```{r}
-# Fit the model on the training data
-regression_all <- glm(has_card ~ ., data = train, family = binomial)
+regression_all_metrics <- list()
+regression_all_predictions <- list()
+regression_all_predictions_threshold <- list()
 
-cv_method <- trainControl(method = "cv", number = 10)
-#regression_all <- train(has_card ~ ., data = train, method = regression_all, trControl = cv_method)
+for(i in 1:length(val_sets)) {
+  
+  regression_all <- glm(has_card ~ ., data = train_sets[[i]], family = binomial)
+  
+  regression_all_predictions[[i]] <- predict(regression_all, val_sets[[i]], type = "response")
+  
+  threshold <- 0.5
+  
+  regression_all_predictions_threshold[[i]] <- ifelse(regression_all_predictions[[i]] > threshold, TRUE, FALSE)
 
-regression_all_explainer <- explain(regression_all, data = train)
-```
+  regression_all_metrics[[i]] <- get_metrics(regression_all_predictions_threshold[[i]], val_sets[[i]]$has_card, "Logistic Regression All")
+  
+}
 
-```{r}
-# Make predictions on the test data
-regression_all_predictions <- predict(regression_all, test, type = "response")
-
-threshold <- 0.5
-regression_all_predictions_threshold <- ifelse(regression_all_predictions > threshold, TRUE, FALSE)
-
-regression_all_metrics <- get_metrics(regression_all_predictions_threshold, test$has_card, "Logistic Regression (All Data)")
+regression_all_metrics <- do.call("rbind", regression_all_metrics)
 metrics_all <- bind_rows(metrics_all, regression_all_metrics)
-regression_all_metrics
-```
 
-```{r}
-plot_confusion_matrix(regression_all_predictions_threshold, test$has_card)
-```
-
-```{r}
-make_roc_plot_and_get_auc(regression_all_predictions, test$has_card)
+colMeans(regression_all_metrics %>% select(-model))
 ```
 
 
 ```{r}
-plot_feature_importance(regression_all)
+
+#regression_all_explainer <- explain(regression_all, data = train)
+```
+
+
+```{r}
+#plot_confusion_matrix(regression_all_predictions_threshold, test$has_card)
 ```
 
 ```{r}
-predictions_train <- predict(regression_all, train, type = "response")
-best_threshold <- find_best_threshold(predictions_train, train$has_card)
+#make_roc_plot_and_get_auc(regression_all_predictions, test$has_card)
 ```
+
 
 ```{r}
-regression_all_predictions_best_thresholds <- ifelse(regression_all_predictions > best_threshold, TRUE, FALSE)
-regression_all_best_threshold_metrics <- get_metrics(regression_all_predictions_best_thresholds, test$has_card, "Logistic Regression All (Best Threshold)")
-
-metrics_all <- bind_rows(metrics_all, regression_all_best_threshold_metrics)
-regression_all_best_threshold_metrics
+#plot_feature_importance(regression_all)
 ```
 
-
-## Mit nur den beiden wichtigsten Variabeln
-
-```{r}
-regression_two <- glm(has_card ~ ., data = train %>% select(max_difference_12, max_difference_11, has_card), family = binomial)
-
-
-cv_method <- trainControl(method = "cv", number = 10)
-#regression_two <- train(has_card ~ ., data = train, method = regression_two, trControl = cv_method)
-
-regression_two_explainer <- explain(regression_two, data = train)
-
-regression_two_predictions <- predict(regression_two, test, type = "response")
-
-threshold <- 0.5
-regression_two_predictions_threshold <- ifelse(regression_two_predictions > threshold, TRUE, FALSE)
-
-regression_two_metrics <- get_metrics(regression_two_predictions_threshold, test$has_card, "Logistic Regression (Two Variables)")
-metrics_all <- bind_rows(metrics_all, regression_two_metrics)
-regression_two_metrics
-```
-
-
-
-# Decision Tree
+### Decision Tree
 
 Für den Decison Tree verwenden wir das Package "rpart".
 
 ```{r}
+decision_tree_metrics <- list()
+decision_tree_predictions <- list()
+decision_tree_predictions_threshold <- list()
 
-decision_tree <- rpart(has_card ~ ., data = train, method = "class")
+for(i in 1:length(val_sets)) {
+  
+  decision_tree <- rpart(has_card ~ ., data = train_sets[[i]], method = "class")
+  
+  decision_tree_predictions[[i]] <- predict(decision_tree, val_sets[[i]], type = "prob")[, 2]
+  
+  threshold <- 0.5
+  
+  decision_tree_predictions_threshold[[i]] <- ifelse(decision_tree_predictions[[i]] > threshold, TRUE, FALSE)
 
-cv_method <- trainControl(method = "cv", number = 10)
-#decision_tree <- train(has_card ~ ., data = train, method = decision_tree, trControl = cv_method)
+  decision_tree_metrics[[i]] <- get_metrics(decision_tree_predictions_threshold[[i]], val_sets[[i]]$has_card, "Decision Tree")
+  
+}
 
-decision_tree_explainer <- explain(decision_tree, data = train)
-
-# Make predictions on the test data (second column is for probability of true)
-decision_tree_predictions <- predict(decision_tree, test, type = "prob")[, 2]
-
-threshold <- 0.5
-decision_tree_predictions_threshold <- ifelse(decision_tree_predictions > threshold, TRUE, FALSE)
-
-decision_tree_metrics <- get_metrics(decision_tree_predictions_threshold, test$has_card, "Decision Tree")
+decision_tree_metrics <- do.call("rbind", decision_tree_metrics)
 metrics_all <- bind_rows(metrics_all, decision_tree_metrics)
-decision_tree_metrics
+
+colMeans(decision_tree_metrics %>% select(-model))
 ```
 
 ```{r}
-plot_confusion_matrix(decision_tree_predictions_threshold, test$has_card)
-make_roc_plot_and_get_auc(decision_tree_predictions, test$has_card)
-predictions_train <- predict(decision_tree, train, type = "prob")[, 2]
-best_threshold <- find_best_threshold(predictions_train, train$has_card)
-rpart.plot(decision_tree)
+#plot_confusion_matrix(decision_tree_predictions_threshold, test$has_card)
+#make_roc_plot_and_get_auc(decision_tree_predictions, test$has_card)
+#predictions_train <- predict(decision_tree, train, type = "prob")[, 2]
+#best_threshold <- find_best_threshold(predictions_train, train$has_card)
+#rpart.plot(decision_tree)
 ```
 
 
@@ -1547,44 +1463,95 @@ Die Klassifikation ist um einiges besser auf dem Decision Tree. Es scheint also 
 
 
 
-# Random Forest 
+### Random Forest 
 
 Für den Random Forest brauchen wir das Package "randomForest". Es verwendet Breiman's random forest algorithmus und kann für Klassifikation und Regression verwendet werden.
 
 Beim Random Forest muss unsere Zielvariabel noch in einen Faktor umgewandelt werden, damit die Wahrscheinlichkeiten vorhergesagt werden können.
 
 ```{r}
-train$has_card <- as.factor(train$has_card)
-# Fit a random forest model to the training data
-random_forest <- randomForest(has_card ~ ., data = train, method = "class")
+random_forest_metrics <- list()
+random_forest_predictions <- list()
+random_forest_predictions_threshold <- list()
 
-cv_method <- trainControl(method = "cv", number = 10)
-#random_forest <- train(has_card ~ ., data = train, method = random_forest, trControl = cv_method)
+for(i in 1:length(val_sets)) {
+  
+  train_sets[[i]]$has_card <- as.factor(train_sets[[i]]$has_card)
+  
+  random_forest <- randomForest(has_card ~ ., data = train_sets[[i]], method = "class")
+  
+  random_forest_predictions[[i]] <- predict(random_forest, val_sets[[i]], type = "prob")[, 2]
+  
+  threshold <- 0.5
+  
+  random_forest_predictions_threshold[[i]] <- ifelse(random_forest_predictions[[i]] > threshold, TRUE, FALSE)
 
-random_forest_explainer <- explain(random_forest, data = train)
+  random_forest_metrics[[i]] <- get_metrics(random_forest_predictions_threshold[[i]], val_sets[[i]]$has_card, "Random Forest")
+  
+}
 
-# Make predictions on the test data (second column is for probability of true)
-random_forest_predictions <- predict(random_forest, test, type = "prob")[, 2]
-
-# Threshold the predicted probabilities
-threshold <- 0.5
-random_forest_predictions_threshold <- ifelse(random_forest_predictions > threshold, TRUE, FALSE)
-
-# Evaluate the model's performance
-random_forest_metrics <- get_metrics(random_forest_predictions_threshold, test$has_card, "Random Forest")
+random_forest_metrics <- do.call("rbind", random_forest_metrics)
 metrics_all <- bind_rows(metrics_all, random_forest_metrics)
-random_forest_metrics
-```
 
+colMeans(random_forest_metrics %>% select(-model))
+```
 Der Random Forest ist ein wenig besser als der Decision Tree. Als nächstes wollen wir probieren, ob eine Hyperparameteroptimierung unser Resultat noch verbessern kann.
 
 
 ```{r}
-plot_confusion_matrix(random_forest_predictions_threshold, test$has_card)
-make_roc_plot_and_get_auc(random_forest_predictions, test$has_card)
-predictions_train <- predict(random_forest, train, type = "prob")[, 2]
-best_threshold <- find_best_threshold(predictions_train, train$has_card)
+#plot_confusion_matrix(random_forest_predictions_threshold, test$has_card)
+#make_roc_plot_and_get_auc(random_forest_predictions, test$has_card)
+#predictions_train <- predict(random_forest, train, type = "prob")[, 2]
+#best_threshold <- find_best_threshold(predictions_train, train$has_card)
 ```
+
+### XGBoost
+
+Das XGBoost Modell wird mit der Library "xgboost" trainiert. Da es Probleme mit nicht-numerischen Variabeln gab, wurden diese entfernt.
+
+```{r}
+xg_boost_metrics <- list()
+xg_boost_predictions <- list()
+xg_boost_predictions_threshold <- list()
+
+for(i in 1:length(val_sets)) {
+  
+  train_data <- train_sets[[i]] %>% select_if(is.numeric)
+  test_data <- val_sets[[i]] %>% select_if(is.numeric)
+  
+  train_data <- cbind(as.numeric(train_sets[[i]]$has_card), train_data)
+  test_data <- cbind(as.numeric(val_sets[[i]]$has_card), test_data)
+  
+  train_preds <- as.matrix(sapply(train_data[,-1], as.numeric))
+  train_labels <- train_data[, 1]
+  
+  test_preds <- as.matrix(sapply(test_data[,-1], as.numeric))
+  test_labels <- test_data[, 1]
+  
+  param <- list(max_depth = 100, eta = 0.1, nthread = 2)
+
+  # Train the model
+  xg_boost <- xgboost(data = train_preds, label = train_labels, nrounds = 100, objective = "binary:logistic", verbose = 0, maximize = "precision", params = param)
+
+  # Make predictions on the test data
+  xg_boost_predictions[[i]] <- predict(xg_boost, test_preds) 
+  
+  threshold <- 0.5
+  
+  xg_boost_predictions_threshold[[i]] <- ifelse(xg_boost_predictions[[i]] > threshold, TRUE, FALSE)
+
+  xg_boost_metrics[[i]] <- get_metrics(xg_boost_predictions_threshold[[i]], val_sets[[i]]$has_card, "XGBoost")
+  
+}
+
+xg_boost_metrics <- do.call("rbind", xg_boost_metrics)
+metrics_all <- bind_rows(metrics_all, xg_boost_metrics)
+
+colMeans(xg_boost_metrics %>% select(-model))
+```
+
+
+
 
 ```{r}
 importance_values <- varImp(random_forest)
@@ -1811,51 +1778,7 @@ fehler
 ```
 
 
-# XGBoost
 
-Das XGBoost Modell wird mit der Library "xgboost" trainiert.
-
-```{r}
-# Set the seed for reproducibility
-set.seed(27)
-
-train$has_card <- as.numeric(train$has_card)
-test$has_card <- as.numeric(test$has_card)
-
-# Convert the data to a matrix
-mat <- as.matrix(train %>% select(has_card, importance_values$variable[1:7]))
-
-# Split the data into training and testing sets
-train_ind <- sample(1:nrow(mat), nrow(mat) * 0.8)
-train_mat <- mat[train_ind, ]
-test_mat <- mat[-train_ind, ]
-
-# Split the labels and predictors
-train_labels <- train_mat[, 1]
-train_preds <- train_mat[, -1]
-test_labels <- test_mat[, 1]
-test_preds <- test_mat[, -1]
-
-param <- list(max_depth = 100, eta = 0.1, nthread = 2)
-
-
-# Train the model
-xg_boost <- xgboost(data = train_preds, label = train_labels, nrounds = 1000, objective = "binary:logistic", verbose = 0, maximize = "F1", params = param)
-
-print(xg_boost)
-
-# Make predictions on the test data
-xg_boost_predictions <- predict(xg_boost, test_preds)
-
-# Threshold the predicted probabilities
-threshold <- 0.5
-xg_boost_predictions_threshold <- ifelse(xg_boost_predictions > threshold, TRUE, FALSE)
-
-# Evaluate the model's performance
-xg_boost_metrics <- get_metrics(xg_boost_predictions_threshold, test_labels, "XGBoost")
-metrics_all <- bind_rows(metrics_all, xg_boost_metrics)
-xg_boost_metrics
-```
 
 ## Hyperparameteroptimierung
 
