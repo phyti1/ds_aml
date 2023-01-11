@@ -113,7 +113,7 @@ sample_n(clients, 10)
 
 Die Tabelle Clients enthält die Client-ID, das Geburtsdatum und die District-ID (welche auf die District-Tabelle verweist). Der Spalte Geburtsdatum sieht man auf den ersten Blick die Datumsräpresentation nicht an. In der Doku wird aber die Struktur ersichtlich: Das Datumsformat ist für Männer YYMMDD und für Frauen YYMMDD+50DD.
 
-In Folge wird die Nummer in ihre Datumsräpresentation konvertiert und die Spalte "gender" als male/female aufgeschlüsselt. Zudem wird das Alter der Kunden im Jahr 1999 berechnet, da der Datensatz aus diesem Jahr stammt.
+In Folge wird die Nummer in ihre Datumsräpresentation konvertiert und die Spalte "gender" als male/female aufgeschlüsselt. Zudem wird das Alter der Kunden im Jahr 1999 berechnet, da der Datensatz aus diesem Jahr stammt. Anschliessend kann das Geburtsdatum entfernt werden.
 
 Ausserdem werden auch hier wieder die fehlenden Werte überprüft.
 
@@ -153,6 +153,8 @@ get_age <- function(birth_date) {
 clients <- clients %>%
    mutate(age = get_age(birth_date))
 
+clients$birth_date <- NULL
+
 sum(is.na(clients))
 ```
 Auch hier gibt es keine fehlenden Werte, welche untersucht werden müssten.
@@ -169,13 +171,15 @@ clients <- clients %>% filter(age >= 25)
 ```{r}
 sample_n(dispositions, 5)
 ```
-Die Tabelle Dispostions enthält die Disposition-ID, die Client-ID (welche auf die Tabelle Clients verweist), die Account-ID (welche auf die Tabelle Accounts verweist) und den Typ der Disposition. Disposition steht dabei für die Rechte eines Kunden für ein gewisses Konto. Hier sollen nur Owners verwendet werden, da die Analyse nur Eigentümer von Konten behandeln soll.
+Die Tabelle Dispostions enthält die Disposition-ID, die Client-ID (welche auf die Tabelle Clients verweist), die Account-ID (welche auf die Tabelle Accounts verweist) und den Typ der Disposition. Disposition steht dabei für die Rechte eines Kunden für ein gewisses Konto. Hier sollen nur Owners verwendet werden, da die Analyse nur Eigentümer von Konten behandeln soll. Da der Type dann für jede Dispostion der gleiche ist, kann diese Variabel entfernt werden.
 
 ```{r}
 dispositions <- dispositions %>% filter(type == 'OWNER')
+dispositions$type <- NULL
 
 sum(is.na(dispositions))
 ```
+
 Auch hier gibt es keine fehlenden Werte, welche genauer untersucht werden müssten.
 
 ## Districts
@@ -208,7 +212,7 @@ sample_n(transactions, 5)
 
 Die Transaktions-Tabelle enthält die Kolonnen Transaktions-ID, Account-ID (welche auf die Tabelle Accounts verweist), Date (das Datum der Transaktion), Type (den Typ der Transaktion), Operation und k_symbol (weitere kategorische Informationen über die Transaktion), Amount (der absolute Wert der Transaktion), Balance (der neue Kontostand) und Informationen über die Bank und den Account.
 
-In den Transaktionen muss das Datum gemäss Format YYMMDD konvertiert und die verschiedenen tschechischen Ausdrücke übersetzt werden. Ein weiteres Problem ist, dass Amount immer eine positive Zahl ist, auch wenn sich die Balance negativ verändert. Dies soll später behandelt werden.
+In den Transaktionen muss das Datum gemäss Format YYMMDD konvertiert und die verschiedenen tschechischen Ausdrücke übersetzt werden. "VYDAJ" heisst übersetzt Ausgabe, "VYBER" Entnahme. Wir übersetzen hier beide Begriffe mit dem Wert "withdrawal".
 
 ```{r}
 # Change formats
@@ -263,7 +267,48 @@ Jetzt schauen wir uns nochmals die fehlenden Werte an.
 ```{r}
 sum(is.na(transactions))
 ```
-Durch das Entfernen der drei Spalten konnten alle fehlenden Werte entfernt werden.
+Durch das Entfernen der drei Spalten konnten alle fehlenden Werte entfernt werden. Nun besteht aber noch das Problem, dass der angegebene Betrag der Transaktionen immer positiv ist, auch wenn das Vermögen sinkt. Wir gehen also davon aus, dass immer der absolute Wert in diesere Kolonne erfasst ist. Dies müssen wir noch bereinigen, so dass der Betrag auch negativ sein kann.
+
+Glücklicherweise gibt es eine weitere Information, welche uns bei diesem Problem weiterhilft: Die Variable "type". 
+
+```{r}
+unique(transactions$type)
+```
+
+Es gibt nur zwei Transaktionstypen: income und withdrawl. Diese geben an, ob Geld auf das Konto fliesst oder entnommen wird. Bei Transaktionen mit Typ "withdrawal" kann also der Betrag negiert werden. Wir fügen die neuen Variabeln "difference" und "prev_balance" hinzu. Sie beschreiben den Betrag mit entsprechendem Vorzeichen und den Kontostand vor der Transaktion.
+
+```{r}
+df <- transactions
+
+# Konvertieren Sie das 'date'-Feld in ein Datum
+#df$date <- as.Date(df$date)
+
+# Sortieren Sie das Dataframe nach Nutzer und Datum. Bei gleichem Datum wird nach tranaction_id sortiert. 
+df <- df[order(df$account_id, df$date, df$trans_id), ]
+
+# Gruppieren Sie das Dataframe nach Nutzer
+df <- group_by(df, account_id)
+
+# Iterieren Sie über jeden Nutzer und bearbeiten Sie die Transaktionen
+df <- df %>% 
+  summarize(transactions = {
+    
+    # Die Different der Transaktion zur Vorherigen wird mittels Typ ausgelesen
+    difference <- ifelse(type == "credit", amount, amount * -1)
+    
+    # Balance ist der Kontostand nach der Transaktion, mittels difference wird der Kontostand vor Transaktion ermittelt.
+    prev_balance <- balance - difference
+
+    # Erstellen Sie das Dataframe mit den Transaktionen für jeden Nutzer
+    transactions_df <- data.frame(amount, date, balance, prev_balance, difference)
+    transactions_df
+  }) %>%
+  ungroup()
+
+transactions <- unnest(df, transactions)
+
+sample_n(transactions, 5)
+```
 
 ## Orders
 
@@ -376,7 +421,7 @@ Es gibt nur 682 Loans. Das bedeutet, dass nicht jeder Kunde ein Darlehen hat, wa
 length(unique(loans$account_id))
 ```
 
-Es gibt also keine Kunden, welche mehrere Darlehen bezogen haben. Die Loans sollen an das gesamte Dataframe mittels Left Join agehängt werden. So gibt es Kunden, welche keine Loans haben. Bei diesen sollen die fehlenden numerischen Werte durch 0 ersetzt und der Status auf "no_loan" geändert werden. 
+Es gibt also keine Kunden, welche mehrere Darlehen bezogen haben. Die Loans sollen an das gesamte Dataframe mittels Left Join agehängt werden. So gibt es Kunden, welche keine Loans haben und die Variabeln den Wert NA haben. Bei diesen sollen die fehlenden numerischen Werte durch 0 ersetzt und der Status auf "no_loan" geändert werden. Das Datum des Loans entfernen wir.
 
 ```{r}
 full <- left_join(full, loans, by = "account_id", suffix = c("", ".loans"))
@@ -384,6 +429,7 @@ full$amount <- ifelse(is.na(full$amount), 0, full$amount)
 full$duration <- ifelse(is.na(full$duration), 0, full$duration)
 full$payments <- ifelse(is.na(full$payments), 0, full$payments)
 full$status <- ifelse(is.na(full$status), "no_loan", full$status)
+full$date.loans <- NULL
 ```
 
 ## Cards
@@ -395,7 +441,7 @@ print(paste("Anzahl Cards:", dim(cards)[1]))
 length(unique(cards$disp_id))
 ```
 
-Es gibt 747 Kunden mit Karten, kein Kunde hat mehrere Karten. Es macht wieder Sinn, dass nicht alle Kunden eine Karte habe. Der Typ der Karte ist immer gleich. Daher wird der Typ der Karte durch einen boolischen Wert "has_card" ersetzt. Dies wird auch unsere Zielvariabel in den Modellen sein.Auch die Card-ID kann entfernt werden.
+Es gibt 747 Kunden mit Karten, kein Kunde hat mehrere Karten. Es macht wieder Sinn, dass nicht alle Kunden eine Karte habe. Der Typ der Karte ist immer gleich. Daher wird der Typ der Karte durch einen boolischen Wert "has_card" ersetzt. Dies wird auch unsere Zielvariabel in den Modellen sein. Auch die Card-ID kann entfernt werden.
 
 ```{r}
 full <- left_join(full, cards, by = "disp_id", suffix = c("", ".cards"))
@@ -411,7 +457,7 @@ has_card_function <- function(x) {
 }
 
 full$has_card <- sapply(full[, "card_id"], has_card_function)
-full <- full %>% select(-card_id, -type.cards)
+full <- full %>% select(-card_id, -type)
 ```
 
 ## Orders
@@ -504,100 +550,51 @@ full <- left_join(full, districts, by = "district_id")
 full <- left_join(full, districts, by = c("district_id.accounts"="district_id"), suffix = c("", ".accounts"))
 ```
 
+Zum Schluss können die verschiedenen ID's entfernt werden, da sie irrelevant für das Modell sind und nicht mehr gebraucht werden. Einzig die Account-ID wird im Datensatz behalten, damit die Transaktionen hinzugefügt werden können.
+
+```{r}
+full <- full %>% select(-client_id, -district_id, -disp_id, -district_id.accounts, -loan_id)
+```
+
 Unser zusammengesetztes Dataframe sieht nun wie folgt aus:
 
 ```{r}
 full
 ```
 
-Nun müssen nur noch die Transaktionsdaten zum Dataframe hinzugefügt werden. Diese müssen aber anders zusammengefasst werden.
+Er beinhaltet 3858 Kunden mit 59 verschiedenen Merkmalen.
 
-# Trennung Buyer / Nicht-Buyer
+## Transactions
 
-
-Als nächstes werden alle Zeilen mit Kreditkartenkäufern von den Nicht-Käufern getrennt.
-
+Nun müssen nur noch die Transaktionsdaten zum Dataframe hinzugefügt werden. Diese müssen aber anders zusammengefasst werden, da jeder Kunde viele Transaktionen haben kann. Die Transaktionen werden für Kreditkartenkäufer und Nicht-Käufer aggregiert, weshalb wir diese als ersten anhand der Variable "has_card" trennen.
 
 ```{r}
 card_buyers <- full %>% filter(has_card == TRUE)
-
 non_buyers <- full %>% filter(has_card == FALSE)
+
+print(paste("Anzahl Käufer:", dim(card_buyers)[1]))
+print(paste("Anzahl Nicht-Käufer:", dim(non_buyers)[1]))
 ```
+Es gibt 706 Kreditkartenkäufer und 3152 Nicht-Käufer.
 
+### Aggregation der Transaktionen für Kreditkartenkäufer
 
-# Ermitteln der Differenz der Transaktionen
+Bei den Kreditkartenkäufern ist der Zeitpunkt des Kreditkartenkaufs gegeben. Da unser Modell Vorhersagen soll, ob ein Kunde eine Kredikarte kauft, haben die Monate unmittelbar vor dem Kaufzeitpunkt den grössten Einfluss. Wir erstellen also für jeden Kreditkartenkäufer ein Rollup-Fenster für die letzten zwölf Monate vor dem Kauf der Kreditkare, minus einem Monat Lag. Diesen Monat beachten wir nicht, da die Bearbeitung eines Kreditkartenkaufs etwa diese Zeitspanne dauert und sich der Kunde dementsprechend bereits vor dem Kaufdatum für eine Kreditkarte interessiert hat.
 
-Bei den Transaktionen ist jeweils die neue Balance und der Betrag der Transaktion angegeben. Das Problem dabei ist, dass alle Beträge positiv sind, auch wenn sie eigentlich abgezogen werden. Das Vorzeichen der Transaktion kann jedoch der Spalte "type" entnommen werden.
-
-```{r}
-transactions
-```
-
-```{r}
-unique(transactions$type)
-```
-
-Es gibt zwei Transaktionstypen: credit und withdrawl, welche das Vorzeichen der Transaktion definieren. Daraus wird in Folge die Differenz und das prev_balance berechnet.
-
-```{r}
-df <- transactions
-
-# Konvertieren Sie das 'date'-Feld in ein Datum
-df$date <- as.Date(df$date)
-
-# Sortieren Sie das Dataframe nach Nutzer und Datum. Bei gleichem Datum wird nach tranaction_id sortiert. 
-df <- df[order(df$account_id, df$date, df$trans_id), ]
-
-# Gruppieren Sie das Dataframe nach Nutzer
-df <- group_by(df, account_id)
-
-# Iterieren Sie über jeden Nutzer und bearbeiten Sie die Transaktionen
-df <- df %>% 
-  summarize(transactions = {
-    
-    # Die Different der Transaktion zur Vorherigen wird mittels Typ ausgelesen
-    difference <- ifelse(type == "credit", amount, amount * -1)
-    
-    # Balance ist der Kontostand nach der Transaktion, mittels difference wird der Kontostand vor Transaktion ermittelt.
-    prev_balance <- balance - difference
-
-    # Erstellen Sie das Dataframe mit den Transaktionen für jeden Nutzer
-    transactions_df <- data.frame(amount, date, balance, prev_balance, difference)
-    transactions_df
-  }) %>%
-  ungroup()
-
-transactions <- unnest(df, transactions)
-
-sample_n(transactions, 5)
-```
-
-```{r}
-transactions %>% filter(sum(abs(balance - prev_balance)) != sum(abs(difference)))
-```
-
-Wie wir in diesem Test sehen, entspricht die Summe der Transaktionsdifferenzen der Differenz des Kontostandes. 
-
-
-# Zusammenfassen der Transaktionen für Card Buyers
-
-Um die Transaktions-Daten in unseren Modellen brauchen zu können, muss für jeden Kunde ein Rollup-Fenster erstellt werden. Dies fasst die Transaktionen der zwölf Monate vor dem Erhalt einer Kreditkarte zusammen (minus einen Monat Input Lag). Auf diesen Monaten werden die Transaktionen zusammengefasst.
-
-Als Erstes werden die Transaktionen von Kunden herausgefiltert, welche eine Kreditkarte haben.
-
+Als Erstes werden dafür die Transaktionen von Kunden herausgefiltert, welche eine Kreditkarte haben.
 
 ```{r}
 account_ids <- card_buyers$account_id
 buyer_transactions <- transactions[transactions$account_id %in% account_ids,]
 ```
 
-Das issued-Datum soll zu den Transaktionen hinzugefügt werden, damit diese für jeden Kunden einzeln gefiltert werden können.
+Das Kreditkartenkaufdatum soll zu den Transaktionen hinzugefügt werden, damit diese für jeden Kunden einzeln gefiltert werden können.
 
 ```{r}
 buyer_transactions <- merge(buyer_transactions, full[, c("account_id", "issued")], by="account_id")
 ```
 
-Nun sollen Transaktionen so gefiltert werden, dass nur noch Transaktionen zwischen 13 Monaten und 1 Monat vor dem Issued Datum vorkommen.
+Nun sollen Transaktionen so gefiltert werden, dass nur noch Transaktionen zwischen 13 Monaten und 1 Monat vor dem Anfang des Monats des Kreditkartenkaufes vorkommen.
 
 ```{r}
 filter_time_range <- function(df)
@@ -607,13 +604,11 @@ filter_time_range <- function(df)
          date <= (floor_date(issued %m-% months(1), "month") - days(1)))
   return(filtered_df)
 }
-```
 
-```{r}
 filtered_df <- filter_time_range(buyer_transactions)
 ```
 
-Es existieren oft Monate, bei denen ein Client keine Transaktionen gemacht hat. In diesen Monaten werden in Folge jeweils eine leere Transaktion eingefügt, welche die Balance der letzten Transaktion des Vormonats trägt. Für die non-buyers muss dies ebenfalls durchgeführt werden, weshalb dies als Funktion implementiert wird.
+Es existieren oft Monate, bei denen ein Kunde keine Transaktionen gemacht hat. Dies liegt entweder daran, dass der Kunde nicht viele Transaktionen tätigt oder die Kreditkarte bereits im ersten Jahr gekauft hat. In diesen Monaten werden in Folge jeweils eine leere Transaktion eingefügt, welche die Balance der letzten Transaktion des Vormonats trägt. 
 
 ```{r}
 impute_missing_months <- function(filtered_df)
@@ -628,19 +623,24 @@ impute_missing_months <- function(filtered_df)
   for (i in 1:length(account_ids))
   {
     user_transactions <- rows_to_impute[rows_to_impute$account_id == account_ids[i],]
+    
     # get all months the client should have a transaction in
     months_target <- sapply(13:2, function(x) format(user_transactions$issued[1] %m-% months(x), "%Y-%m"))
+    
     # create dummy transaction in case first month is empty
     new_transaction <- user_transactions[1,]
     new_transaction$difference = 0
+    
     # use prev_balance in case the first element gets imputed
     new_transaction$balance <- new_transaction$prev_balance
+    
     for (month_target in months_target)
     {
       new_transaction$date <- as.Date(paste0(month_target, "-01"))
       new_transaction$month <- month_target
       # get last transaction of current month from the current user's transactions
       last_transaction <- tail(user_transactions %>% filter(month == month_target), n=1)
+      
       if(nrow(last_transaction) == 0)
       {
         # impute empty transaction in missing month
@@ -657,21 +657,20 @@ impute_missing_months <- function(filtered_df)
   close(pb)
   return(filtered_df)
 }
-```
 
-```{r}
 filtered_df <- impute_missing_months(filtered_df)
 ```
 
+Bei 169 Kreditkartenkäufer ist kein komplettes 12-Monats-Rollup-Fenster vorhanden. Bei allen wurden die fehlenden Monate imputiert.
 
-Auf diesen Daten wird eine Gruppierung anhand der account_id und des Monats gemacht werden. Die Werte in difference und balance werden zu verschiedenen Metriken zusammengefasst:
-Auf beiden Werten erfassen wir das Minimum, das Maximum, den Durchschnitt, den Median und die Standardabweichung. Bei der balance erfassen wir die erste und die letzte Balance des Monats und bei difference die Anzahl positive und negative differences.
+Nun werden diese Daten aggregiert. Es wird eine Gruppierung anhand der account_id und des Monats gemacht. Die Werte "difference" und "balance" auf verschiedene Arten aggregiert:
+Auf beiden Werten erfassen wir das Minimum, das Maximum, den Durchschnitt, den Median und die Standardabweichung. Bei "balance" erfassen wir den ersten und den letzten Wert des Monats und bei "difference" die Anzahl positive und negative Differenzen.
 
 ```{r}
 get_summary_df <- function(filtered_df)
 {
   summary_df <- filtered_df %>%
-  group_by(account_id, issued, month) %>%
+  group_by(account_id, month) %>%
   summarise(
     max_difference = max(difference),
     min_difference = min(difference),
@@ -691,15 +690,17 @@ get_summary_df <- function(filtered_df)
   summary_df <- summary_df %>% arrange(account_id)
   return(summary_df)
 }
+
+summary_df <- get_summary_df(filtered_df)
 ```
+
+Diese Zusammenfassung sieht nun für jeden Kunden folgendermassen aus:
 
 ```{r}
-summary_df <- get_summary_df(filtered_df)
-summary_df
+summary_df %>% filter(account_id == 7)
 ```
 
-
-Jetzt haben wir für jede account_id eine Übersicht über die 12 Monate vor dem Kartenerhalt. Da es aber sein könnte, dass es Kunden gibt, welche nicht jeden Monat eine Transaktion hatten oder die Kreditkarte bereits im ersten Jahr erhalten haben, kontrollieren wir dies noch.
+Für jeden Kunden gibt es nun für jeden Monat vor dem Kreditkartenkauf eine Row mit den aggregierten Daten des Monats. Wir überprüfen noch kurz, ob auch wirklich für jeden Kunden zwölf Monate vorhanden sind.
 
 ```{r}
 get_incomplete_buyers <- function(summary_df)
@@ -715,12 +716,10 @@ get_incomplete_buyers <- function(summary_df)
 }
 
 month_counts <- get_incomplete_buyers(summary_df)
-month_counts
+print(paste("Anzahl Kunden mit weniger als 12 Monaten:", dim(month_counts)[1]))
 ```
 
-Nach der Imputation gibt es keine Kunden mehr, welche nicht 12 Monate mit Transaktionen beinhalten. 
-
-Als Nächstes nummerieren wir die Monate pro account_id von 1 bis 12 durch, um danach weiter damit arbeiten zu können.
+Jeder Kreditkartenkäufer hat also wirklich 12 Monate. Als nächstes wollen wir diese zwölf Rows pro Kunde zu einer Row umwandeln. Dafür nummerieren wir zunächst die Monate pro Kreditkartenkäufer von 1 bis 12 durch.
 
 ```{r}
 set_month_ids <- function(summary_df)
@@ -750,7 +749,7 @@ summary_df <- set_month_ids(summary_df)
 
 ```
 
-Nun möchten wir alle Informationen pro account_id auf einer Zeile haben. Dafür brauchen wir pivot_wider. So haben wir jede Kennzahl zwölf mal als Kolonne, jedes Mal mit der vorher erstellten Monatsnummer als Suffix.
+Als nächstes brauchen wir pivot_wider. So haben wir jede Kennzahl zwölf mal als Kolonne, jedes Mal mit der vorher erstellten Monatsnummer als Suffix.
 
 ```{r}
 pivot_by_month <- function(summary_df)
@@ -763,20 +762,32 @@ pivot_by_month <- function(summary_df)
 }
 
 summary_df_wide <- pivot_by_month(summary_df)
-summary_df_buyers <- merge(summary_df_wide, subset(card_buyers, select = -issued), by = "account_id")
 ```
 
+Das daraus resultierende Dataframe sieht so aus:
 
-# Finden von ähnlichen Nutzern
+```{r}
+summary_df_wide
+```
 
-Zu jedem Kartenkäufer soll nun ein ähnlicher Nichtkäufer gefunden werden.
-Dafür werden zuerst Nichtkäufer gleichen Geschlechts und Region gesucht.
-Diese sollen im Zeitfenster issued-13 bis issued-1 Monate vor Kartenkauf des korrespondierenden Käufers mindestens eine Transaktion haben.
-Am Ende wird der Nichtkäufer mit dem ähnlichsten Alter gewählt.
+Für jeden Kreditkartenkäufer gibt es jetzt eine Row mit 169 verschiedenen Merkmalen: Die account_id und die 14 aggregierten Informationen über die Transaktiionen für alle 12 Monate.
+
+Dieses Dataframe fügen wir noch zu den anderen Informationen der Kreditkartenkäufer hinzu.
+
+```{r}
+summary_df_buyers <- merge(summary_df_wide, subset(card_buyers), by = "account_id")
+```
+
+### Aggregation der Transaktionen für Nicht-Käufer
+
+Für Nicht-Käufer ist kein Datum des Kreditkartenkaufs gegeben, da sie ja keine gekauft haben. Es stellt sich also die Frage, von welchem Datum aus man das Rollup-Fenster erstellt.
+
+Wir haben uns dazu entschieden, für jeden Käufer einen möglichst ähnlichen Nicht-Käufer zu finden. Dafür werden Nichtkäufer mit gleichem Geschlecht und gleicher Region gesucht. Das Kaufdatum des ähnlichen Käufers wird dann auf den Nicht-Käufer übertragen. Ein weiteres Kriterium ist, dass der Nicht-Käufer mindestens eine Transaktion in dem Rollup-Fenster haben muss. Jeder Nicht-Käufer wird maximal einmal als Match genommen, damit keine doppelten Kunden im Datensatz vorkommen.
+
+Durch dieses Vorgehen benutzen wir nur einen Teil der Nicht-Käufer, haben aber direkte, ähnliche Vergleichspersonen, welche im gleichen Zeitraum keine Kreditkarten gekauft haben. Ausserdem bringt das Vorgehen auch den Vorteil, dass die Daten für das Modell automatisch Balanced sind. Dies macht das Trainieren des Modells einfacher, da es dazu beiträgt, dass das Modell nicht Biased gegenüber den Nicht-Käufern wird.
 
 
 ```{r}
-
 pb <- txtProgressBar(min = 0, max = nrow(card_buyers), style = 3, width = 50, char = "=")
 
 # Erstelle ein leeres DataFrame "similar_non_buyers"
@@ -789,11 +800,10 @@ for (i in 1:nrow(card_buyers))
   current_buyer <- card_buyers[i, ]
   
   similar_non_buyers_temp <- non_buyers %>% filter(gender == current_buyer$gender & 
-                                                   region == current_buyer$region) 
-                                                   #abs(age - current_buyer$age) <= 100)
+                                                   region == current_buyer$region)
   
   # damit nicht der gleiche non_buyer doppelt verwendet wird
-  similar_non_buyers_temp <- similar_non_buyers_temp[!similar_non_buyers_temp$client_id %in% similar_non_buyers$client_id,]
+  similar_non_buyers_temp <- similar_non_buyers_temp[!similar_non_buyers_temp$account_id %in% similar_non_buyers$account_id,]
   
   # filtere non-buyers heraus, welche keine Transaktionen im relevanten Zeitraum vor issued haben
   similar_non_buyers_temp$issued <- current_buyer$issued
@@ -802,45 +812,12 @@ for (i in 1:nrow(card_buyers))
   non_buyer_ids <- unique(non_buyer_filtered$account_id)
   
   similar_non_buyers_temp <- similar_non_buyers_temp[similar_non_buyers_temp$account_id %in% non_buyer_ids,]
-  # Wähle die Kunden aus dem DataFrame "non_buyers" aus, die das gleiche Geschlecht haben und möglichst gleich alt sind und möglichst in der gleichen Region wohnen
-  
-  #similar_non_buyers_temp_copy <- similar_non_buyers_temp %>% filter(region == current_buyer$region)
-  #if(nrow(similar_non_buyers_temp_copy) > 0)
-  #{
-  #  similar_non_buyers_temp <- similar_non_buyers_temp_copy
-  #}
-  #else
-  #{
-  #  print(paste(current_buyer$account_id, "could not filter region"))
-  #}
-  # age difference will be filtered later
-  #abs(age - current_buyer$age) <= 5,
            
-  
   if(nrow(similar_non_buyers_temp) > 0)
   {
-    ## (ungebraucht) Implementierung zur Herausfilterung von Monaten ohne Transaktionen
-    # filtere alle non-boyers, welche nicht genug Transaktionen haben
-    # finde alle Transaktionen der selektierten non-buyers
-    # non_buyer_transactions <- merge(transactions, similar_non_buyers_temp, by='account_id')
-    # filtere diese Transaktionen auf issued-13m bis issued-1m
-    #non_buyer_transactions <- non_buyer_transactions %>% filter(
-    #  date.x >= floor_date(current_buyer$issued %m-% months(13), 'month') &
-    #  date.x <= floor_date(current_buyer$issued %m-% months(1), 'month') - days(1))
-    
-    # finde Anzahl Monate mit Transaktionen
-    #non_buyer_transactions$month <- format(non_buyer_transactions$date.x, "%Y-%m")
-    #month_counts <- non_buyer_transactions %>% group_by(account_id) %>% summarise(month_count = n_distinct(month))
-  
-    # filtere alle accounts, welche nicht alle 12 Monate hat
-    #month_counts <- month_counts %>% filter(month_count == 12)
-    #similar_non_buyers_temp <- similar_non_buyers_temp %>% filter(account_id %in% month_counts$account_id)
-    
     # Wähle den am besten passenden Kunden aus "similar_non_buyers_temp" aus
     best_match_index <- which.min(abs(similar_non_buyers_temp$age - current_buyer$age))
     best_match <- similar_non_buyers_temp[best_match_index, ]
-    
-    # print(best_match$client_id)
     
     similar_non_buyers <- rbind(similar_non_buyers, copy(best_match))
     setTxtProgressBar(pb, i)
@@ -852,79 +829,50 @@ for (i in 1:nrow(card_buyers))
 }
 
 close(pb)
-
-print(paste(length(unique(similar_non_buyers$account_id)), length(unique(card_buyers$account_id))))
+```
+```{r}
+print(paste("Anzahl Buyers:", length(unique(card_buyers$account_id))))
+print(paste("Anzahl gefundene Matches:", length(unique(similar_non_buyers$account_id))))
 ```
 
 
-Wie hier sichtbar wird, kann zu allen Kartenkäufer einen passenden Nichtkäufer gefunden werden. Dafür musste jedoch die Altersdifferenz-Einschränkung aufgehoben werden. Es entsteht ein balanced Dataset für die Weiterentwicklung.
-
-# Zusammenfassen der Transaktionen für non buyers
-
-Auch hier sollen die Transaktionen gleich wie bei den Käufern zusammengefasst werden.
+Wie hier sichtbar wird, konnte zu allen Kartenkäufer ein passender Nicht-Käufer gefunden werden. Auf diesen sollen die Transaktionsdaten jetzt gleich wie bei den Kreditkartenkäufern aggregiert werden. Als erstes werden die Transaktionen wieder auf das gegebene Rollup-Fenster gefiltert.
 
 ```{r}
 # find missings
-non_buyer_transactions <- merge(transactions, similar_non_buyers[, c("account_id", "client_id", "issued")], by='account_id')
+non_buyer_transactions <- merge(transactions, similar_non_buyers[, c("account_id", "issued")], by='account_id')
 filtered_df <- filter_time_range(non_buyer_transactions)
-print(length(unique(filtered_df$account_id)))
-unique(non_buyer_transactions[!non_buyer_transactions$account_id %in% unique(filtered_df$account_id),]$account_id)
 ```
 
-Wie diese Analyse zeigt, existieren keine non-buyers ohne Transaktionen im definierten Zeitfenster mehr.
-
+Als nächstes werden wieder Aggregationen für jeden Monat erstellt und fehlende Monate analog zu den Kreditkartenkäufern imputiert.
 
 ```{r}
-non_buyer_transactions <- merge(transactions, similar_non_buyers[, c("account_id", "client_id", "issued")], by='account_id')
-
-filtered_df <- filter_time_range(non_buyer_transactions)
-
 filtered_df <- impute_missing_months(filtered_df)
 
 summary_df_non_buyers <- get_summary_df(filtered_df)
 ```
 
+Auch hier haben 168 Kunden kein vollständiges Rollup-Fenster. Wir überprüfen wieder, ob für jeden Kunden alle 12 Monate vorhanden sind.
 
 ```{r}
-print(paste(nrow(summary_df_non_buyers), nrow(summary_df_buyers)))
-```
-
-Die Anzahl Zeilen in den summary_df's sind identisch. 
-
-```{r}
-# Kontrolle, ob für jeden account_id 12 monate vorhanden sind
 month_counts <- get_incomplete_buyers(summary_df_non_buyers)
-month_counts
+print(paste("Anzahl Kunden mit weniger als 12 Monaten:", dim(month_counts)[1]))
 ```
 
-Auch hier haben wieder keine Kunden weniger als 12 kontinuierliche Monate mit Transaktionen, da diese durch die Imputation gefüllt wurden.
+Die Imputation hat funktioniert, es gibt keine Kunden mit weniger als 12 Monaten. Nun werden die Daten wieder auf eine Row ausgeweitet und mit den anderen Informationen der Kunden zusammengefügt.
 
 
 ```{r}
 summary_df_non_buyers <- set_month_ids(summary_df_non_buyers)
-```
-
-Die Transaktionsdaten werden mit den anderen Daten zusammengefügt, um pro Kunde eine Zeile in einem Dataframe zu haben.
-
-```{r}
 summary_df_wide <- pivot_by_month(summary_df_non_buyers)
-
-summary_df_non_buyers <- merge(summary_df_wide, subset(similar_non_buyers, select = -issued), by = "account_id")
-print(nrow(summary_df_non_buyers))
+summary_df_non_buyers <- merge(summary_df_wide, similar_non_buyers, by = "account_id")
 ```
 
-Wir haben nun wieder die 706 Zeilen auch für die non-buyers.
+Zum Schluss werden die Käufer und die Nicht-Käufer in einem Datensatz kombiniert. Die Account-ID kann noch entfernt werden.
 
 ```{r}
 final_df <- rbind(summary_df_buyers, summary_df_non_buyers)
-print(dim(final_df))
-```
-
-Jetzt müssen noch einige Variabeln entfernt werden.
-
-```{r}
-# Entferne weitere unnötige Variabeln wie ID's oder Werte, welche überall gleich sind
-final_df <- final_df %>% select(-client_id, -district_id, -district_id.accounts, -disp_id, -type, -loan_id, -account_id)
+final_df$account_id <- NULL
 ```
 
 Ausserdem scheinen einige Variabeln als Faktoren im Datensatz zu sein, welche eigentlich numerisch wären.
@@ -935,6 +883,14 @@ final_df$unemployment_rate_95.accounts <- as.numeric(final_df$unemployment_rate_
 final_df$crimes_95 <- as.numeric(final_df$crimes_95)
 final_df$crimes_95.accounts <- as.numeric(final_df$crimes_95.accounts)
 ```
+
+Unser finales Dataframe sieht wie folgt aus:
+
+```{r}
+final_df
+```
+
+Der Datensatz enthält 1412 Kunden mit 226 verschiedenen Variabeln. Die Hälfte der Kunden sind Kreditkartenkäufer. Die Zielvariabel für spätere Modelle ist "has_card".
 
 # EDA
 
@@ -1353,9 +1309,13 @@ regression_baseline_metrics
 ```{r}
 plot_confusion_matrix(regression_baseline_predictions_threshold, test$has_card)
 ```
+```{r}
+#
+```
+
 
 ```{r}
-make_roc_plot_and_get_auc(regression_baseline_predictions_threshold, test$has_card)
+make_roc_plot_and_get_auc(regression_baseline_predictions, test$has_card)
 ```
 
 ```{r}
@@ -1505,7 +1465,7 @@ plot_confusion_matrix(regression_all_predictions_threshold, test$has_card)
 ```
 
 ```{r}
-make_roc_plot_and_get_auc(regression_all_predictions_threshold, test$has_card)
+make_roc_plot_and_get_auc(regression_all_predictions, test$has_card)
 ```
 
 
@@ -1576,7 +1536,7 @@ decision_tree_metrics
 
 ```{r}
 plot_confusion_matrix(decision_tree_predictions_threshold, test$has_card)
-make_roc_plot_and_get_auc(decision_tree_predictions_threshold, test$has_card)
+make_roc_plot_and_get_auc(decision_tree_predictions, test$has_card)
 predictions_train <- predict(decision_tree, train, type = "prob")[, 2]
 best_threshold <- find_best_threshold(predictions_train, train$has_card)
 rpart.plot(decision_tree)
@@ -1621,7 +1581,7 @@ Der Random Forest ist ein wenig besser als der Decision Tree. Als nächstes woll
 
 ```{r}
 plot_confusion_matrix(random_forest_predictions_threshold, test$has_card)
-make_roc_plot_and_get_auc(random_forest_predictions_threshold, test$has_card)
+make_roc_plot_and_get_auc(random_forest_predictions, test$has_card)
 predictions_train <- predict(random_forest, train, type = "prob")[, 2]
 best_threshold <- find_best_threshold(predictions_train, train$has_card)
 ```
