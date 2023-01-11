@@ -1509,6 +1509,7 @@ Der Random Forest ist ein wenig besser als der Decision Tree. Als nächstes woll
 
 Das XGBoost Modell wird mit der Library "xgboost" trainiert. Da es Probleme mit nicht-numerischen Variabeln gab, wurden diese entfernt.
 
+
 ```{r}
 xg_boost_metrics <- list()
 xg_boost_predictions <- list()
@@ -1516,8 +1517,12 @@ xg_boost_predictions_threshold <- list()
 
 for(i in 1:length(val_sets)) {
   
-  train_data <- train_sets[[i]] %>% select_if(is.numeric)
-  test_data <- val_sets[[i]] %>% select_if(is.numeric)
+  train_data <- train_sets[[i]]
+  test_data <- val_sets[[i]]
+  
+  train_data[] <- lapply(train_sets[[i]], as.numeric)
+  test_data[] <- lapply(val_sets[[i]], as.numeric)
+
   
   train_data <- cbind(as.numeric(train_sets[[i]]$has_card), train_data)
   test_data <- cbind(as.numeric(val_sets[[i]]$has_card), test_data)
@@ -1531,7 +1536,7 @@ for(i in 1:length(val_sets)) {
   param <- list(max_depth = 100, eta = 0.1, nthread = 2)
 
   # Train the model
-  xg_boost <- xgboost(data = train_preds, label = train_labels, nrounds = 100, objective = "binary:logistic", verbose = 0, maximize = "precision", params = param)
+  xg_boost <- xgboost(data = train_preds, label = train_labels - 1, nrounds = 100, objective = "binary:logistic", verbose = 0, maximize = "precision", params = param)
 
   # Make predictions on the test data
   xg_boost_predictions[[i]] <- predict(xg_boost, test_preds) 
@@ -1539,7 +1544,7 @@ for(i in 1:length(val_sets)) {
   threshold <- 0.5
   
   xg_boost_predictions_threshold[[i]] <- ifelse(xg_boost_predictions[[i]] > threshold, TRUE, FALSE)
-
+  
   xg_boost_metrics[[i]] <- get_metrics(xg_boost_predictions_threshold[[i]], val_sets[[i]]$has_card, "XGBoost")
   
 }
