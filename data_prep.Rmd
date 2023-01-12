@@ -199,7 +199,7 @@ sample_n(dispositions, 5)
 Die Tabelle Dispostions enthält die Disposition-ID, die Client-ID (welche auf die Tabelle Clients verweist), die Account-ID (welche auf die Tabelle Accounts verweist) und den Typ der Disposition.
 Disposition steht dabei für die Rechte eines Kunden für ein gewisses Konto.
 Hier sollen nur Owners verwendet werden, da die Analyse nur Eigentümer von Konten behandeln soll.
-Da der Type dann für jede Dispostion der gleiche ist, kann diese Variabel entfernt werden.
+Da der Type dann für jede Dispostion der gleiche ist, wird diese Variable entfernt.
 
 ```{r}
 dispositions <- dispositions %>% filter(type == 'OWNER')
@@ -316,7 +316,7 @@ Glücklicherweise gibt es eine weitere Information, welche uns bei diesem Proble
 unique(transactions$type)
 ```
 
-Es gibt nur zwei Transaktionstypen: income und withdrawl.
+Es gibt nur zwei Transaktionstypen: income und withdrawal.
 Diese geben an, ob Geld auf das Konto fliesst oder entnommen wird.
 Bei Transaktionen mit Typ "withdrawal" kann also der Betrag negiert werden.
 Wir fügen die neuen Variabeln "difference" und "prev_balance" hinzu.
@@ -414,7 +414,7 @@ Auch hier gibt es keine fehlenden Werte.
 
 # Zusammenfügen der Dataframes
 
-Als nächstes fassen wir die Dataframes zu einem grossen Dataframe zusammen, damit wir später Modelle darauf trainieren können.
+Als Nächstes fassen wir die Dataframes zu einem grossen Dataframe zusammen, damit wir später Modelle darauf trainieren können.
 Dabei müssen wir überprüfen, ob es sich bei den Verbindungen der verschiedenen Tabellen um n zu n Beziehungen handelt.
 Wir starten mit der Tabelle Clients und fügen immer mehr Tabellen hinzu.
 
@@ -429,7 +429,7 @@ Es gibt also weniger Dispositions als Clients.
 Aber gibt es Clients mit mehreren Dispositions?
 
 ```{r}
-length(unique(dispositions$client_id))
+dim(dispositions)[1] - length(unique(dispositions$client_id))
 ```
 
 Nein, es gibt keine Clients mit mehreren Dispositionen.
@@ -470,7 +470,7 @@ full <- inner_join(full, accounts, by = "account_id", suffix = c("", ".accounts"
 dim(full)[1]
 ```
 
-Unser Dataframe hat immer noch eine Länge von 4500.
+Unser Dataframe hat immer noch eine Länge von 3858 Zeilen oder Kunden.
 
 ## Loans
 
@@ -483,7 +483,7 @@ Das bedeutet, dass nicht jeder Kunde ein Darlehen hat, was Sinn ergibt.
 Weiter soll noch überprüft werden, ob es Kunden gibt, welche mehrere Darlehen haben.
 
 ```{r}
-length(unique(loans$account_id))
+dim(loans)[1] - length(unique(loans$account_id))
 ```
 
 Es gibt also keine Kunden, welche mehrere Darlehen bezogen haben.
@@ -514,7 +514,8 @@ length(unique(cards$disp_id))
 Es gibt 747 Kunden mit Karten, kein Kunde hat mehrere Karten.
 Es macht wieder Sinn, dass nicht alle Kunden eine Karte habe.
 Der Typ der Karte ist immer gleich.
-Daher wird der Typ der Karte durch einen boolischen Wert "has_card" ersetzt.
+
+Daher wird in Folge der Typ der Karte durch den boolschen Wert "has_card" ersetzt.
 Dies wird auch unsere Zielvariabel in den Modellen sein.
 Auch die Card-ID kann entfernt werden.
 
@@ -2038,9 +2039,7 @@ make_roc_plot_and_get_auc_list <- function(predictions, true_values)
     {
       lines(roc_curve, xlab = "False Positive Rate", ylab = "True Positive Rate", main ="ROC Curve", col=colors[i])
     }
-    
   }
-  
   legend("bottomright", legend=c("Logistic Regression", "Decision Tree", "Random Forest", "XGBoost"), col=colors, pch=4)
 }
 
