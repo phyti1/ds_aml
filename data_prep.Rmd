@@ -1644,7 +1644,7 @@ Wir möchten den Datensatz auf 10 Features reduzieren.
 Dabei entfernen wir bei jedem Durchlauf 10 Features.
 
 ```{r}
-if (FALSE) {
+if (TRUE) {
 set.seed(27)
 
 # transform has_card to factor and remove status
@@ -1658,47 +1658,48 @@ control <- rfeControl(functions = caretFuncs,
 
 # Perform RFE
 rfe_dt <- rfe(x = train %>% select(-has_card), y = train$has_card,
-             sizes = c(seq(from = 200, to = 10, by = -10)),
+             sizes = c(1:20),
              rfeControl = control,
              method = "rpart")
 
-# Extract the selected features
-selected_features <- rfe_dt$optVariables
 }
 ```
 
-Um den Decision Tree noch weiter zu verbessern, wollen wir die verschiedenen Hyperparameter optimieren.
-Hyperparameteroptimierung (auch Tuning genannt) ist der Prozess, die beste Set von Hyperparametern für ein maschinelles Lernmodell zu finden.
+```{r}
+print(rfe_dt)
+```
+
+
+```{r}
+predictors(rfe_dt)
+```
+
+
+Um den Decision Tree noch weiter zu verbessern, wollen wir die verschiedenen Hyperparameter optimieren. Hyperparameteroptimierung (auch Tuning genannt) ist der Prozess, die beste Set von Hyperparametern für ein maschinelles Lernmodell zu finden.
 Wir probieren, folgenden Parameter zu optimieren:
 
-cp : der Complexity-Parameter, der die Kompliziertheit des Baums reguliert, indem er die Größe des Baums beschränkt.
-Je kleiner cp desto größer der Baum
+cp (complexity parameter): Der cp-Parameter legt fest, wie restriktiv der Baum beim Aufteilen von Knoten ist. Ein kleinerer Wert führt zu einem komplexeren Baum mit mehr Knoten und möglicherweise besserer Anpassungsfähigkeit. Ein größerer Wert führt zu einem einfacheren Baum mit weniger Knoten und möglicherweise besserer Generalisierbarkeit. 
+Mögliche Werte: c(0.001, 0.01, 0.05, 0.1)
 
-Da die Metrik Precision in der Methode nicht vorhanden ist, probieren wir, auf Accuracy zu optimieren.
+maxdepth : Dieser Parameter legt die maximale Tiefe des Baums fest. Ein größerer Wert ermöglicht es dem Baum, tiefer zu wachsen und möglicherweise bessere Anpassungsfähigkeit zu erreichen, während ein kleinerer Wert dazu führen kann, dass der Baum einfacher und generalisierbarer ist. 
+Mögliche Werte: c(5,10,15)
 
-```{r}
-param_grid <- expand.grid(cp = c(0.001, 0.01, 0.1))
+minsize : Dieser Parameter legt die minimale Anzahl von Beobachtungen in einem Knoten fest, die erforderlich ist, damit dieser Knoten weiter aufgeteilt werden kann. Ein größerer Wert führt dazu, dass der Baum einfacher ist und weniger überanpassung erfährt, während ein kleinerer Wert dazu führen kann, dass der Baum komplexer ist und möglicherweise bessere Anpassungsfähigkeit erreicht. 
+Mögliche Werte: c(2,5,10)
 
-train$has_card <- as.factor(train$has_card)
-
-decision_tree_tuned <- train(has_card ~ .,
-                              data = train,
-                              method = "rpart",
-                              metric = "Accuracy",
-                              tuneGrid = param_grid,
-                              trControl = trainControl(method = "cv", number = 10))
-```
-
-```{r}
-print(decision_tree_tuned)
-```
+In Python würden wir dies normalerweise mit einem GridSearch implementieren. Hier hatten wir aber Probleme damit: Nur ein Paremeter hätte optimiert werden können (cp). Deshalb haben wir die verschiedenen Werte manuell ausprobiert und jeweils den Wert mit der höchsten Precision als bester Parameter genommen.
 
 ```{r}
 decision_tree_tuned_metrics <- list()
 decision_tree_tuned_predictions <- list()
 decision_tree_tuned_predictions_threshold <- list()
 
+control = rpart.control(minsize = 1, cp = 0.01)
+
 for(i in 1:length(val_sets)) {
+  set.seed(61)
+  
+  decision_tree_tuned <- rpart(has_card ~ ., data = train_sets[[i]], method = "class", control = control)
   
   decision_tree_tuned_predictions[[i]] <- predict(decision_tree_tuned, val_sets[[i]], type = "prob")[, 2]
   
@@ -1772,9 +1773,7 @@ Es ist eine Sequenz von Ganzzahlen von 1 bis 30 mit einem Schritt von 5.
 ntree : die Anzahl der Bäume, die im Zufallswald gewachsen sind.
 
 ```{r}
-param_grid <- expand.grid(mtry = c(0.1, 1, 10, 100))
-
-# Define the model using the train() function
+param_grid <- expand.grid(mtry = c(0.1, 1, 10, 100), max = c(100))
 
 random_forest_tuned <- train(has_card ~ .,
                               data = train,
@@ -1797,7 +1796,7 @@ for(i in 1:length(val_sets)) {
   
   train_sets[[i]]$has_card <- as.factor(train_sets[[i]]$has_card)
   
-  random_forest_tuned <- randomForest(has_card ~ ., data = train_sets[[i]], method = "class", mtry = 100)
+  random_forest_tuned <- randomForest(has_card ~ ., data = train_sets[[i]], method = "class", mtry = 100, maxnodes = 100, ntree = 50)
   
   random_forest_tuned_predictions[[i]] <- predict(random_forest_tuned, val_sets[[i]], type = "prob")[, 2]
   
