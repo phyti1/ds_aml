@@ -1124,7 +1124,7 @@ Diese Funktion erstellt eine Konfusionsmatrix und gibt sie als Plot zurück.
 Eine Konfusionsmatrix ist ein wichtiges Werkzeug zur Evaluation von Klassifikationsmodellen. Sie zeigt an, wie gut das Modell in der Lage ist, die verschiedenen Klassen richtig zu identifizieren. In einer Konfusionsmatrix werden die tatsächlichen und die von dem Modell vorhergesagten Klassen gegenübergestellt. Die Matrix ist in vier Quadranten unterteilt: true positives (TP), true negatives (TN), false positives (FP) und false negatives (FN). TP sind die Fälle, in denen das Modell die Klasse richtig vorhergesagt hat, TN sind die Fälle, in denen das Modell die Klasse richtig vorhergesagt hat und diese Klasse auch tatsächlich vorliegt, FP sind die Fälle, in denen das Modell eine Klasse vorhergesagt hat, die in Wirklichkeit nicht vorliegt, und FN sind die Fälle, in denen das Modell eine Klasse nicht vorhergesagt hat, die in Wirklichkeit vorliegt. Eine Konfusionsmatrix ist hilfreich, um die Genauigkeit, Sensitivität und Spezifität des Modells zu berechnen und um zu sehen, an welchen Stellen das Modell Schwächen hat. Sie kann auch verwendet werden, um die Leistung von verschiedenen Modellen miteinander zu vergleichen.
 
 ```{r}
-plot_confusion_matrix <- function(predictions, true_values) {
+plot_confusion_matrix <- function(predictions, true_values, title = "") {
   # Erstelle eine Confusion Matrix als Data Frame
   confusion_matrix_df <- data.frame(predictions, true_values)
   
@@ -1136,7 +1136,7 @@ plot_confusion_matrix <- function(predictions, true_values) {
     geom_tile(aes(fill = n)) +
     geom_text(aes(label = n)) +
     scale_fill_gradient(low = "white", high = "darkgreen") +
-    labs(x = "Predicted Class", y = "True Class", title = "Confusion Matrix")
+    labs(x = "Predicted Class", y = "True Class", title = paste("Confusion Matrix", title))
 }
 ```
 
@@ -1450,24 +1450,95 @@ metrics_all <- bind_rows(metrics_all, decision_tree_metrics)
 colMeans(decision_tree_metrics %>% select(-model))
 ```
 
+Decision Trees sind in der Lage, mit einer grossen Anzahl von Merkmalen umzugehen. Es kann aber auch von Vorteil sein, nicht alle Merkmale zu benutzen, um Überanpassung zu vermeiden und dadurch die Performance des Modells zu verbessern. Dies kann auch die Interpretierbarkeit des Modells erhöhen und die Kosten für das Training und die Auswertung des Modells reduzieren.
+
+Daher wollen wir als nächstes untersuchen, ob das Modell besser wird, wenn nicht alle Features verwendet werden. 
+
+Dafür benutzen wir die Funktion RFE vom Paket caret. RFE steht für "Recursive Feature Elimination" (rekursive Merkmalsentfernung) und ist eine Technik, die verwendet wird, um eine Teilmenge der relevantesten Merkmale aus einem gegebenen Datensatz auszuwählen. Das Hauptziel von RFE ist es, die Anzahl der Merkmale im Datensatz zu reduzieren, während die Fähigkeit des Modells, präzise vorherzusagen, erhalten bleibt oder sogar verbessert wird.
+
+Der RFE-Algorithmus funktioniert, indem er Merkmale rekursiv aus dem Datensatz entfernt und bei jedem Schritt ein Modell auf den verbleibenden Merkmalen trainiert. Das Merkmal, das die geringste Beitrag zur Modellleistung hat, wird bei jedem Schritt entfernt. Der Vorgang wird dann wiederholt, bis eine bestimmte Anzahl von Merkmalen erreicht ist oder bis keine weiteren Verbesserungen der Modellleistung erreicht werden.
+
+Da der RFE bereits mit Cross-Validation arbeitet, benutzen wir hier das gesamte Trainingsset. Danach machen wir nochmals unsere eigene Kreuzvalidierung mit dem gefundenen Subset der Input-Parametern. Wir möchten den Datensatz auf 10 Features reduzieren. Dabei entfernen wir bei jedem Durchlauf 10 Features.
+
 ```{r}
-#plot_confusion_matrix(decision_tree_predictions_threshold, test$has_card)
-#make_roc_plot_and_get_auc(decision_tree_predictions, test$has_card)
-#predictions_train <- predict(decision_tree, train, type = "prob")[, 2]
-#best_threshold <- find_best_threshold(predictions_train, train$has_card)
-#rpart.plot(decision_tree)
+if (FALSE) {
+set.seed(27)
+
+# transform has_card to factor and remove status
+train$has_card <- as.factor(train$has_card)
+train$status <- NULL
+
+
+control <- rfeControl(functions = caretFuncs,
+                      method = "repeatedcv",
+                      repeats = 5)
+
+# Perform RFE
+rfe_dt <- rfe(x = train %>% select(-has_card), y = train$has_card,
+             sizes = c(seq(from = 200, to = 10, by = -10)),
+             rfeControl = control,
+             method = "rpart")
+
+# Extract the selected features
+selected_features <- rfe_dt$optVariables
+}
+```
+
+Um den Decision Tree noch weiter zu verbessern, wollen wir die verschiedenen Hyperparameter optimieren. Hyperparameteroptimierung (auch Tuning genannt) ist der Prozess, die beste Set von Hyperparametern für ein maschinelles Lernmodell zu finden. Wir probieren, folgenden Parameter zu optimieren:
+
+cp : der Complexity-Parameter, der die Kompliziertheit des Baums reguliert, indem er die Größe des Baums beschränkt. Je kleiner cp desto größer der Baum
+
+Da die Metrik Precision in der Methode nicht vorhanden ist, probieren wir, auf Accuracy zu optimieren.
+
+```{r}
+param_grid <- expand.grid(cp = c(0.001, 0.01, 0.1))
+
+train$has_card <- as.factor(train$has_card)
+
+decision_tree_tuned <- train(has_card ~ .,
+                              data = train,
+                              method = "rpart",
+                              metric = "Accuracy",
+                              tuneGrid = param_grid,
+                              trControl = trainControl(method = "cv", number = 10))
+```
+
+```{r}
+print(decision_tree_tuned)
 ```
 
 
-Die Klassifikation ist um einiges besser auf dem Decision Tree. Es scheint also für unseren Verwendungszweck der bessere Algorithmus zu sein. Wir untersuchen noch Erweiterungen des Decision Trees: der Random Forest.
+```{r}
+decision_tree_tuned_metrics <- list()
+decision_tree_tuned_predictions <- list()
+decision_tree_tuned_predictions_threshold <- list()
 
+for(i in 1:length(val_sets)) {
+  
+  decision_tree_tuned_predictions[[i]] <- predict(decision_tree_tuned, val_sets[[i]], type = "prob")[, 2]
+  
+  threshold <- 0.5
+  
+  decision_tree_tuned_predictions_threshold[[i]] <- ifelse(decision_tree_tuned_predictions[[i]] > threshold, TRUE, FALSE)
+
+  decision_tree_tuned_metrics[[i]] <- get_metrics(decision_tree_tuned_predictions_threshold[[i]], val_sets[[i]]$has_card, "Decision Tree (Tuned)")
+  
+}
+
+decision_tree_tuned_metrics <- do.call("rbind", decision_tree_tuned_metrics)
+metrics_all <- bind_rows(metrics_all, decision_tree_tuned_metrics)
+
+colMeans(decision_tree_tuned_metrics %>% select(-model))
+```
+
+Die Klassifikation ist um einiges besser auf dem Decision Tree. Es scheint also für unseren Verwendungszweck der bessere Algorithmus zu sein. Wir untersuchen noch Erweiterungen des Decision Trees: den Random Forest und XGBoost
 
 
 ### Random Forest 
 
 Für den Random Forest brauchen wir das Package "randomForest". Es verwendet Breiman's random forest algorithmus und kann für Klassifikation und Regression verwendet werden.
 
-Beim Random Forest muss unsere Zielvariabel noch in einen Faktor umgewandelt werden, damit die Wahrscheinlichkeiten vorhergesagt werden können.
+Beim Random Forest muss unsere Zielvariabel noch in einen Faktor umgewandelt werden, damit ein Wert zwischen 0 und 1 vorhergesagt werden kann.
 
 ```{r}
 random_forest_metrics <- list()
@@ -1495,15 +1566,84 @@ metrics_all <- bind_rows(metrics_all, random_forest_metrics)
 
 colMeans(random_forest_metrics %>% select(-model))
 ```
-Der Random Forest ist ein wenig besser als der Decision Tree. Als nächstes wollen wir probieren, ob eine Hyperparameteroptimierung unser Resultat noch verbessern kann.
+Der Random Forest ist ein wenig besser als der Decision Tree. Als nächstes wollen wir probieren, ob eine Hyperparameteroptimierung unser Resultat noch verbessern kann. Bei der Hyperparameteroptimierung gehen wir wieder gleich vor, wie beim Decision Tree. Wir probieren, folgende Parameter zu optimieren:
+
+mtry : die Anzahl der Variablen, die zufällig als Kandidaten an einer Trennung ausgewählt werden.
+splitrule : die Trennregel, die verwendet wird, um die Qualität einer Trennung zu bewerten. "gini" Unreinheit und "extratrees" sind zwei häufig verwendete Trennregeln.
+min.node.size : die minimale Anzahl von Beobachtungen in einem Endknoten.
+max.depth : die maximale Tiefe des Baumes. Es ist eine Sequenz von Ganzzahlen von 1 bis 30 mit einem Schritt von 5.
+ntree : die Anzahl der Bäume, die im Zufallswald gewachsen sind.
+
+```{r}
+param_grid <- expand.grid(mtry = c(0.1, 1, 10, 100))
+
+# Define the model using the train() function
+
+random_forest_tuned <- train(has_card ~ .,
+                              data = train,
+                              method = "rf",
+                              metric = "Accuracy",
+                              tuneGrid = param_grid,
+                              trControl = trainControl(method = "cv", number = 10))
+
+print(random_forest_tuned$bestTune)
+```
+
+Auch hier nehmen wir wieder das optimierte Modell und untersuchen es mit unserer eigenen Kreuzvalidierung.
+
+```{r}
+random_forest_tuned_metrics <- list()
+random_forest_tuned_predictions <- list()
+random_forest_tuned_predictions_threshold <- list()
+
+for(i in 1:length(val_sets)) {
+  
+  train_sets[[i]]$has_card <- as.factor(train_sets[[i]]$has_card)
+  
+  random_forest_tuned <- randomForest(has_card ~ ., data = train_sets[[i]], method = "class", mtry = 100)
+  
+  random_forest_tuned_predictions[[i]] <- predict(random_forest_tuned, val_sets[[i]], type = "prob")[, 2]
+  
+  threshold <- 0.5
+  
+  random_forest_tuned_predictions_threshold[[i]] <- ifelse(random_forest_tuned_predictions[[i]] > threshold, TRUE, FALSE)
+
+  random_forest_tuned_metrics[[i]] <- get_metrics(random_forest_tuned_predictions_threshold[[i]], val_sets[[i]]$has_card, "Random Forest (Tuned)")
+  
+}
+
+random_forest_tuned_metrics <- do.call("rbind", random_forest_tuned_metrics)
+metrics_all <- bind_rows(metrics_all, random_forest_tuned_metrics)
+
+colMeans(random_forest_tuned_metrics %>% select(-model))
+```
 
 
 ```{r}
-#plot_confusion_matrix(random_forest_predictions_threshold, test$has_card)
-#make_roc_plot_and_get_auc(random_forest_predictions, test$has_card)
-#predictions_train <- predict(random_forest, train, type = "prob")[, 2]
-#best_threshold <- find_best_threshold(predictions_train, train$has_card)
+if (FALSE) {
+set.seed(27)
+
+# transform has_card to factor and remove status
+train$has_card <- as.factor(train$has_card)
+train$status <- NULL
+
+
+control <- rfeControl(functions = caretFuncs,
+                      method = "repeatedcv",
+                      repeats = 5)
+
+# Perform RFE
+rfe_dt <- rfe(x = train %>% select(-has_card), y = train$has_card,
+             sizes = c(seq(from = 200, to = 10, by = -10)),
+             rfeControl = control,
+             method = "rpart")
+
+# Extract the selected features
+selected_features <- rfe_dt$optVariables
+selected_features
+}
 ```
+
 
 ### XGBoost
 
@@ -1520,8 +1660,8 @@ for(i in 1:length(val_sets)) {
   train_data <- train_sets[[i]]
   test_data <- val_sets[[i]]
   
-  train_data[] <- lapply(train_sets[[i]], as.numeric)
-  test_data[] <- lapply(val_sets[[i]], as.numeric)
+  train_data <- train_sets[[i]] %>% select_if(is.numeric)
+  test_data <- val_sets[[i]] %>% select_if(is.numeric)
 
   
   train_data <- cbind(as.numeric(train_sets[[i]]$has_card), train_data)
@@ -1555,265 +1695,27 @@ metrics_all <- bind_rows(metrics_all, xg_boost_metrics)
 colMeans(xg_boost_metrics %>% select(-model))
 ```
 
-
-
-
-```{r}
-importance_values <- varImp(random_forest)
-importance_values$variable <- rownames(varImp(random_forest)) 
-importance_values <- importance_values[order(importance_values$Overall, decreasing = TRUE),]
-
-# Wählen Sie die top 10 Merkmale aus
-top_features <- head(importance_values, n = 10)
-top_features
-
-```
-
-TODO: CHECK if ifelse is correct
-
-```{r}
-# Initialize empty vector to store f1-scores
-set.seed(27)
-f1_scores <- c()
-
-# Loop through each variable and fit a random forest model
-for (i in 1:50) {
-  # Select subset of variables
-  vars_subset <- importance_values$variable[1:i]
-  
-  # Fit random forest model
-  train_reduced <- train %>% select(has_card, vars_subset)
-  model <- randomForest(has_card ~ ., data = train_reduced, method = "class")
-  
-  # Make predictions on test data
-  predictions <- predict(model, test, type = "prob")[, 2]
-  
-  # Threshold predictions
-  threshold <- 0.5
-  predictions_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
-  
-  # Calculate f1-score
-  f1 <- get_metrics(predictions_threshold, test$has_card, "random forest test")$f1
-  
-  # Append f1-score to vector
-  f1_scores <- c(f1_scores, f1)
-}
-
-# Find the index of the maximum f1-score
-best_index <- which.max(f1_scores)
-
-# Print the best f1-score and the corresponding number of variables
-print(paste("Best f1-score:", f1_scores[best_index]))
-print(paste("Number of variables:", best_index))
-
-# Plot the f1-scores
-plot(1:length(f1_scores), f1_scores, type = "l", xlab = "Number of variables", ylab = "f1-score")
-```
-
-```{r}
-set.seed(27)
-# Fit a random forest model to the training data
-random_forest_important_features <- randomForest(has_card ~ ., data = train %>% select(has_card, importance_values$variable[1:best_index]), method = "class")
-
-cv_method <- trainControl(method = "cv", number = 10)
-#random_forest_important_features <- train(has_card ~ ., data = train, method = random_forest_important_features, trControl = cv_method)
-
-random_forest_important_features_explainer <- explain(random_forest_important_features, data = train)
-
-# Make predictions on the test data (second column is for probability of true)
-random_forest_important_features_predictions <- predict(random_forest_important_features, test, type = "prob")[, 2]
-
-# Threshold the predicted probabilities
-threshold <- 0.5
-random_forest_important_features_threshold <- ifelse(predictions > threshold, TRUE, FALSE)
-
-# Evaluate the model's performance
-random_forest_important_features_metrics <- get_metrics(random_forest_important_features_threshold, test$has_card, "Random Forest (most Important Features)")
-metrics_all <- bind_rows(metrics_all, random_forest_important_features_metrics)
-random_forest_important_features_metrics
-```
-
-
-
-# Hyperparamter Optimierung auf Random Forest
-
-```{r}
-set.seed(27)
-# Define the hyperparameter grid
-param_grid <- expand.grid(mtry = c(0.1, 1, 10, 100),
-                         splitrule = c("gini", "extratrees"),
-                         min.node.size = c(1, 10, 15, 20),
-                         max.depth = seq(1, 30, 5),
-                         ntree = c(100, 500, 1000))
-
-# Define the model using the train() function
-random_forest_hyperparameter <- randomForest(has_card ~ .,
-               data = train %>% select(has_card, importance_values$variable[1:7]),
-               method = "rf",
-               tuneGrid = param_grid,
-               trControl = trainControl(method = "cv", number = 10))
-
-random_forest_hyperparameter_explainer <- explain(random_forest_hyperparameter, data = train)
-
-# Make predictions on the test data
-random_forest_hyperparameter_predictions <- predict(random_forest_hyperparameter, test, type = "prob")[, 2]
-
-# Threshold the predicted probabilities
-threshold <- 0.5
-random_forest_hyperparameter_predictions_threshold <- ifelse(random_forest_hyperparameter_predictions > threshold, TRUE, FALSE)
-
-print(random_forest_hyperparameter)
-
-# Evaluate the model's performance
-get_metrics(random_forest_hyperparameter_predictions_threshold, test$has_card, "Random Forest (Hyperparamter Optimization")
-```
-
-
-
-# Recursive Feature Elimnation
-
-Eine Möglichkeit, die Leistung von Random Forest zu verbessern, ist die Verwendung von Recursive Feature Elimination (RFE).
-
-RFE ist ein Feature Selection-Verfahren, das dazu verwendet wird, die wichtigsten Features (also diejenigen Merkmale, die für die Vorhersage am wichtigsten sind) auszuwählen und alle anderen zu entfernen. Dies hat mehrere Vorteile:
-
-Es reduziert die Laufzeit von Random Forest, da weniger Features verarbeitet werden müssen.
-Es kann dazu beitragen, Overfitting zu vermeiden, indem es irrelevanten oder redundanten Features entfernt.
-Es kann dazu beitragen, die Interpretierbarkeit von Random Forest zu verbessern, da wichtigere Features leichter zu verstehen sind.
-
+Mit Hyperparameteroptimierung:
 
 ```{r}
 if (FALSE) {
-# Define the control object
-control <- rfeControl(functions = rfFuncs,
-                      method = "repeatedcv",
-                      repeats = 5)
+train_data <- train_sets[[i]]
+  test_data <- val_sets[[i]]
+  
+  train_data <- train_sets[[i]] %>% select_if(is.numeric)
+  test_data <- val_sets[[i]] %>% select_if(is.numeric)
 
-# Perform RFE
-rfe <- rfe(x = train %>% select(-has_card), y = train$has_card,
-             sizes = c(1:19, seq(from = 20, to = ncol(train), by = 10)),
-             rfeControl = control)
-
-# Extract the selected features
-selected_features <- rfe$optVariables
-
-print(rfe)
-}
-```
-
-```{r}
-if (FALSE) {
-# Fit a random forest model using the selected features
-random_forest_rfe <- randomForest(has_card ~ ., data = train[c(selected_features, "has_card")], method = "class")
-
-cv_method <- trainControl(method = "cv", number = 10)
-random_forest_rfe <- train(has_card ~ ., data = train, method = random_forest_rfe, trControl = cv_method)
-
-random_forest_rfe_explainer <- explain(random_forest_rfe, data = train)
-
-# Make predictions on the test data
-random_forest_rfe_predictions <- predict(random_forest_rfe, test, type = "prob")[, 2]
-
-# Threshold the predicted probabilities
-threshold <- 0.5
-random_forest_rfe_predictions_threshold <- ifelse(random_forest_rfe_predictions > threshold, TRUE, FALSE)
-
-# Evaluate the model's performance
-random_forest_rfe_metrics <- get_metrics(random_forest_rfe_predictions_threshold, test$has_card, "Random Forest (RFE)")
-metrics_all <- bind_rows(metrics_all, random_forest_rfe_metrics)
-random_forest_rfe_metrics
-}
-```
-
-```{r}
-metrics_all
-```
-
-```{r}
-ggplot(metrics_all, aes(x = model, y = f1)) + geom_point() + geom_line(aes(group = 1)) + ylim(0.5,1)
-
-```
-
-
-```{r}
-# Next, create a plot using ggplot() and specify the dataframe as the first argument
-ggplot(data = metrics_all, aes(x = model)) +
-
-# Use geom_line() to create a line plot, and map the F1 metric to the y-axis with aes()
-geom_line(aes(y = f1))
-
-# Finally, use labs() to label the x- and y-axes and give the plot a title
-labs(x = "Model", y = "F1 value", title = "Model performance (F1)")
-```
-
-
-```{r}
-# Next, create a plot using ggplot() and specify the dataframe as the first argument
-ggplot(data = metrics_all, aes(x = model)) +
-
-# Use geom_line() to create a line plot, and map the different metrics to the y-axis and the color aesthetic with aes()
-geom_line(aes(y = accuracy, color = "Accuracy")) +
-geom_line(aes(y = kappa, color = "Kappa")) +
-geom_line(aes(y = matthews, color = "Matthews")) +
-geom_line(aes(y = precision, color = "Precision")) +
-geom_line(aes(y = recall, color = "Recall")) +
-geom_line(aes(y = f1, color = "F1"))
-
-# Use scale_color_manual() to specify the colors for each metric
-scale_color_manual(values = c("Accuracy" = "blue", "Kappa" = "red", "Matthews" = "green", "Precision" = "purple", "Recall" = "orange", "F1" = "pink"))
-
-# Finally, use labs() to label the x- and y-axes and give the plot a title
-labs(x = "Model", y = "Metric value", title = "Model performance")
-```
-
-
-```{r}
-#comparison <- compare(regression_baseline_explainer, regression_all_explainer, decision_tree_explainer, random_forest_explainer)
-
-vip_baseline <- variable_importance(regression_baseline_explainer, n_sample = -1, loss_function = loss_root_mean_square) 
-vip_regression_all  <- variable_importance(regression_all_explainer, n_sample = -1, loss_function = loss_root_mean_square)
-vip_decision_tree <- variable_importance(decision_tree_explainer, n_sample = -1, loss_function = loss_root_mean_square)
-vip_random_forest <- variable_importance(random_forest_explainer, n_sample = -1, loss_function = loss_root_mean_square)
-
-plot(vip_baseline, vip_regression_all, vip_decision_tree, vip_random_forest, max_vars = 10)
-```
-
-
-```{r}
-fehler
-```
-
-
-
-
-## Hyperparameteroptimierung
-
-```{r}
-if (FALSE) {
-# Set the seed for reproducibility
-set.seed(27)
-
-train$has_card <- as.numeric(train$has_card)
-test$has_card <- as.numeric(test$has_card)
-
-# Convert the data to a matrix
-mat <- as.matrix(train %>% select(has_card, importance_values$variable[1:7]))
-
-# Split the data into training and testing sets
-train_ind <- sample(1:nrow(mat), nrow(mat) * 0.8)
-train_mat <- mat[train_ind, ]
-test_mat <- mat[-train_ind, ]
-
-# Split the labels and predictors
-train_labels <- train_mat[, 1]
-train_preds <- train_mat[, -1]
-test_labels <- test_mat[, 1]
-test_preds <- test_mat[, -1]
-
-train_labels <- as.factor(train_labels)
-test_labels <- as.factor(test_labels)
-
-# Define the hyperparameter grid
-param_grid <- expand.grid(nrounds = c(1000, 2000, 5000),
+  
+  train_data <- cbind(as.numeric(train_sets[[i]]$has_card), train_data)
+  test_data <- cbind(as.numeric(val_sets[[i]]$has_card), test_data)
+  
+  train_preds <- as.matrix(sapply(train_data[,-1], as.numeric))
+  train_labels <- train_data[, 1]
+  
+  test_preds <- as.matrix(sapply(test_data[,-1], as.numeric))
+  test_labels <- test_data[, 1]
+  
+  param_grid <- expand.grid(nrounds = c(1000, 2000, 5000),
                          eta = c(0.1, 0.2, 0.3),
                          max_depth = c(3, 5, 7, 10),
                          gamma = c(0, 0.1, 0.2, 1),
@@ -1821,32 +1723,136 @@ param_grid <- expand.grid(nrounds = c(1000, 2000, 5000),
                          min_child_weight = c(1, 3, 5),
                          subsample = c(0.5, 0.8, 1))
 
-# Train the model using caret's train() function
-xg_boost_hyperparameter <- train(x = train_preds, y = train_labels, method = "xgbTree", trControl = trainControl(method = "cv", number = 10), tuneGrid = param_grid, metric = "F", verbose = FALSE, verbosity = 0)
+xg_boost_hyperparameter <- train(x = train_preds, y = train_labels, method = "xgbTree", trControl = trainControl(method = "cv", number = 10), tuneGrid = param_grid, metric = "Accuracy", verbose = FALSE, verbosity = 0) 
 
-
-print(model)
-
-# Make predictions on the test data
-xg_boost_hyperparameter_predictions <- predict(xg_boost_hyperparameter, test_preds)
-
-# Threshold the predicted probabilities
-threshold <- 0.5
-xg_boost_hyperparameter_predictions_threshold <- ifelse(xg_boost_hyperparameter_predictions > threshold, TRUE, FALSE)
-
-# Evaluate the model's performance
-xg_boost_hyperparamter_metrics <- get_metrics(xg_boost_hyperparameter_predictions_threshold, test_labels)
-metrics_all <- bind_rows(metrics_all, xg_boost_hyperparamter_metrics)
-xg_boost_hyperparamter_metrics
 }
+
 ```
 
 
-# Übersicht über alle Modelle
+
+# Das "beste" Modell
+
+Um nun herauszufinden, welches unserer Modelle das beste ist, vergleichen wir die Modelle auf verschiedene Arten und Weisen. Dabei betrachten wir pro Modellalgorithmus nur das jeweils beste bezüglich der Precision. Also vergleichen wir vier Modelle: eine logistische Regression, ein Decision Tree, ein Random Forest und ein XGBoost.
+
+Wir schauen die durchschnittlichen Scores, die Verteilung der Precisions anhand der Kreuzvalidierung, Top-N-Listen, Konfusionsmatrizen, ROC-Kurven und die Feature Importance aller Modelle an und versuchen so, das beste Modell zu evaluieren.
 
 ```{r}
-metrics_all
+chosen_models <- c("Logistic Regression All", "Decision Tree", "Random Forest", "XGBoost")
+metrics_all <- metrics_all %>% filter(model %in% chosen_models)
 ```
+
+
+## Übersicht der durchschnittlichen Scores
+
+```{r}
+metrics_all %>% group_by(model) %>% summarize_if(is.numeric, mean) %>% arrange(desc(precision))
+```
+
+
+## Verteilungen der Precision
+
+```{r}
+ggplot(data = metrics_all, aes(x = model, y = precision)) +
+  geom_boxplot() +
+  labs(title = "Verteilung der Precision pro Modell", x = "Modell", y = "Precision")
+```
+
+
+
+## Vergleich der Top-N-Listen
+
+Hier vergleichen wir die Top-N-Listen der Modelle. Für jedes Modell wird eine Top-20 Liste der Kunden vom ersten und letzten Validierungsset der Kreuzvalidierung mit den höchsten Werten bei der Prediction gemacht. All diese Kunden müssten demnach Käufer sein. In den beiden Tabellen stellen wir dar, ob die Modelle auf den jeweiligen Positionen recht behalten haben oder nicht.
+
+(RandomForest liefert oft die gleichen Werte)
+
+
+```{r}
+users <- val_sets[[10]]
+
+users$prediction <- decision_tree_predictions[[10]]
+Decision_Tree <- head(users %>% arrange(desc(prediction)), 20)$has_card
+
+users$prediction <- xg_boost_predictions[[10]]
+XGBoost <- head(users %>% arrange(desc(prediction)), 20)$has_card
+
+
+users$prediction <- regression_all_predictions[[10]]
+Regression <- head(users %>% arrange(desc(prediction)), 20)$has_card
+
+
+users$prediction <- random_forest_predictions[[10]]
+RandomForest <- head(users %>% arrange(desc(prediction)), 20)$has_card
+
+df <- data.frame(Regression, Decision_Tree, RandomForest, XGBoost)
+
+df
+```
+
+```{r}
+users <- val_sets[[1]]
+
+users$prediction <- decision_tree_predictions[[1]]
+Decision_Tree <- head(users %>% arrange(desc(prediction)), 20)$has_card
+
+users$prediction <- xg_boost_predictions[[1]]
+XGBoost <- head(users %>% arrange(desc(prediction)), 20)$has_card
+
+
+users$prediction <- regression_all_predictions[[1]]
+Regression <- head(users %>% arrange(desc(prediction)), 20)$has_card
+
+
+users$prediction <- random_forest_predictions[[1]]
+RandomForest <- head(users %>% arrange(desc(prediction)), 20)$has_card
+
+df <- data.frame(Regression, Decision_Tree, RandomForest, XGBoost)
+
+df
+```
+
+## Konfusionsmatrizen
+
+Auch die Konfusionsmatrizen werden wieder für d
+
+```{r}
+plot_confusion_matrix(regression_all_predictions_threshold[[7]], val_sets[[7]]$has_card, "Regression")
+plot_confusion_matrix(decision_tree_predictions_threshold[[7]], val_sets[[7]]$has_card, "Decision Tree")
+plot_confusion_matrix(random_forest_predictions_threshold[[7]], val_sets[[7]]$has_card, "Random Forest")
+plot_confusion_matrix(xg_boost_predictions_threshold[[7]], val_sets[[7]]$has_card, "XGBoost")
+```
+
+## Feature Importance
+
+```{r}
+
+only_numeric <- train %>% select_if(is.numeric)
+y <- factor(train$has_card, ordered = TRUE)
+
+explainer_rf <- explain(
+  model = xg_boost,
+  data = train %>% select(-has_card),
+  y = train$has_card
+  )
+
+```
+
+```{r}
+explainer_rf %>% model_parts() %>% plot(show_boxplots = FALSE) + ggtitle("Feature Importance ", "")
+
+```
+
+
+# Reduzieren des besten Modelles
+
+Lift Kurve?
+
+# Bestes Modell auf den Testdaten
+
+## Mit Off-Time
+
+## Ohne Off-Time
+
 
 
 # Fazit
