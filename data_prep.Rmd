@@ -513,7 +513,7 @@ length(unique(cards$disp_id))
 
 Es gibt 747 Kunden mit Karten, kein Kunde hat mehrere Karten.
 Es macht wieder Sinn, dass nicht alle Kunden eine Karte habe.
-Der Typ der Karte ist immer gleich.
+Der Kartentyp ist immer gleich.
 
 Daher wird in Folge der Typ der Karte durch den boolschen Wert "has_card" ersetzt.
 Dies wird auch unsere Zielvariabel in den Modellen sein.
@@ -552,9 +552,9 @@ Diese Informationen müssen wir zu einer Row zusammenfassen.
 
 Dabei haben wir uns dafür entschieden, die Variabeln account_to und amount nicht in den Gesamtdatensatz einfliessen zu lassen.
 Der amount ist bereits in den Transaktionen inbegriffen.
-An wen die Zahlungen gehen sollten keinen Einfluss auf unser Modell haben.
+An wen die Zahlungen gehen, sollte keinen Einfluss auf unser Modell haben.
 
-Also bleiben uns noch die Variabeln characterization und bank_to.
+Also bleiben uns noch die Variabeln "characterization" und "bank_to".
 Zuerst schauen wir uns an, wie viele verschiedene Werte diese beiden Variabeln annehmen können.
 
 ```{r}
@@ -572,8 +572,8 @@ Bei diesen beiden Variabeln gibt es nur 5 bzw.
 Wir können also diese Werte wie folgt an den grossen Datensatz anfügen:
 
 Für jede Ausprägung der Spalte gibt es eine neue Kolonne.
-Diese Kolonne nimmt den Wert der Anzahl der Orders mit dieser characterization bzw.
-bank_to an.
+Diese Kolonne nimmt den Wert der Anzahl der Orders mit dieser "characterization" bzw.
+"bank_to" an.
 
 ```{r}
 characterizations <- orders %>%
@@ -626,14 +626,14 @@ full$YZ[is.na(full$YZ)] <- 0
 ## Districts
 
 Jeder Kunde sowie jeder Account ist einem Gebiet zugewiesen.
-Zuerst überprüfen wir, ob es sich dabei immer um das selbe Gebiet handelt.
+Zuerst überprüfen wir, ob es sich dabei immer um dasselbe Gebiet handelt.
 
 ```{r}
 sum(full$district_id != full$district_id.accounts)
 ```
 
-409 Personen haben ihren Account also in einem anderen Distrikt, als sie zugewiesen sind.
-Wir müssen also die District-Informationen für beide District-ID's zuweisen.
+349 Personen haben ihren Account also in einem anderen Distrikt, als sie zugewiesen sind.
+Wir müssen die District-Informationen für beide District-ID's zuweisen.
 Dies machen wir wieder mit Left-Joins.
 
 ```{r}
@@ -649,7 +649,7 @@ Einzig die Account-ID wird im Datensatz behalten, damit die Transaktionen hinzug
 full <- full %>% select(-client_id, -district_id, -disp_id, -district_id.accounts, -loan_id)
 ```
 
-Unser zusammengesetztes Dataframe sieht nun wie folgt aus:
+Unser zusammengesetztes Dataframe sieht nun folgendermassen aus:
 
 ```{r}
 full
@@ -661,7 +661,7 @@ Er beinhaltet 3858 Kunden mit 59 verschiedenen Merkmalen.
 
 Nun müssen nur noch die Transaktionsdaten zum Dataframe hinzugefügt werden.
 Diese müssen aber anders zusammengefasst werden, da jeder Kunde viele Transaktionen haben kann.
-Die Transaktionen werden für Kreditkartenkäufer und Nicht-Käufer aggregiert, weshalb wir diese als ersten anhand der Variable "has_card" trennen.
+Die Transaktionen werden für Kreditkartenkäufer und Nicht-Käufer aggregiert, weshalb wir diese als Erstes anhand der Variable "has_card" trennen.
 
 ```{r}
 card_buyers <- full %>% filter(has_card == TRUE)
@@ -677,8 +677,8 @@ Es gibt 706 Kreditkartenkäufer und 3152 Nicht-Käufer.
 
 Bei den Kreditkartenkäufern ist der Zeitpunkt des Kreditkartenkaufs gegeben.
 Da unser Modell Vorhersagen soll, ob ein Kunde eine Kredikarte kauft, haben die Monate unmittelbar vor dem Kaufzeitpunkt den grössten Einfluss.
-Wir erstellen also für jeden Kreditkartenkäufer ein Rollup-Fenster für die letzten zwölf Monate vor dem Kauf der Kreditkare, minus einem Monat Lag.
-Diesen Monat beachten wir nicht, da die Bearbeitung eines Kreditkartenkaufs etwa diese Zeitspanne dauert und sich der Kunde dementsprechend bereits vor dem Kaufdatum für eine Kreditkarte interessiert hat.
+Wir erstellen also für jeden Kreditkartenkäufer ein Rollup-Fenster für die letzten zwölf Monate vor dem Kauf der Kreditkare, vor einem einmonatigen Lag Fenster unmittelbar vor dem Kaufdaum.
+Diesen Monat beachten wir nicht, da die Bearbeitung eines Kreditkartenkaufs etwa zwei bis vier Wochen dauern kann und sich der Kunde dementsprechend bereits vor dem Kaufdatum für eine Kreditkarte entschieden hat.
 
 Als Erstes werden dafür die Transaktionen von Kunden herausgefiltert, welche eine Kreditkarte haben.
 
@@ -708,7 +708,7 @@ filtered_df <- filter_time_range(buyer_transactions)
 ```
 
 Es existieren oft Monate, bei denen ein Kunde keine Transaktionen gemacht hat.
-Dies liegt entweder daran, dass der Kunde nicht viele Transaktionen tätigt oder die Kreditkarte bereits im ersten Jahr gekauft hat.
+Dies liegt entweder daran, dass der Kunde nicht viele Transaktionen tätigte oder die Kreditkarte bereits im ersten Jahr gekauft hat.
 In diesen Monaten werden in Folge jeweils eine leere Transaktion eingefügt, welche die Balance der letzten Transaktion des Vormonats trägt.
 
 ```{r}
@@ -766,7 +766,7 @@ Bei 169 Kreditkartenkäufer ist kein komplettes 12-Monats-Rollup-Fenster vorhand
 Bei allen wurden die fehlenden Monate imputiert.
 
 Nun werden diese Daten aggregiert.
-Es wird eine Gruppierung anhand der account_id und des Monats gemacht.
+Es wird eine Gruppierung anhand der "account_id" und des Monats gemacht.
 Die Werte "difference" und "balance" auf verschiedene Arten aggregiert: Auf beiden Werten erfassen wir das Minimum, das Maximum, den Durchschnitt, den Median und die Standardabweichung.
 Bei "balance" erfassen wir den ersten und den letzten Wert des Monats und bei "difference" die Anzahl positive und negative Differenzen.
 
@@ -804,7 +804,7 @@ Diese Zusammenfassung sieht nun für jeden Kunden folgendermassen aus:
 summary_df %>% filter(account_id == 7)
 ```
 
-Für jeden Kunden gibt es nun für jeden Monat vor dem Kreditkartenkauf eine Row mit den aggregierten Daten des Monats.
+Für jeden Kunden gibt es nun für jeden Monat vor dem Kreditkartenkauf eine Zeile mit den aggregierten Daten des Monats.
 Wir überprüfen noch kurz, ob auch wirklich für jeden Kunden zwölf Monate vorhanden sind.
 
 ```{r}
@@ -1949,6 +1949,10 @@ metrics_all <- metrics_all %>% filter(model %in% chosen_models)
 metrics_all %>% group_by(model) %>% summarize_if(is.numeric, mean) %>% arrange(desc(precision))
 ```
 
+In dieser Darstellung sind die durchschnittlichen Scores über die Cross Validation pro Modell aufgezeigt.
+Das beste Modell bezüglich Train CV-Score ist der Random Forest. Er ist jedoch bei allen Kennzahlen fast deckungsgleich wie der XGBoost. 
+Dies macht Sinn, da XGBoost eine Erweiterung des Random Forests ist. 
+
 ## Verteilungen der Precision
 
 ```{r}
@@ -1957,6 +1961,12 @@ ggplot(data = metrics_all, aes(x = model, y = precision)) +
   labs(title = "Verteilung der Precision pro Modell", x = "Modell", y = "Precision")
 ```
 
+In dieser Darstellung werden die Verteilungen der CV-Scores pro Modell aufgezeigt.
+Ein gut optimiertes Modell sollte auf den Cross-Validation Sets möglichst ähnliche Scores aufweisen.
+Damit kann aufgezeigt werden, dass das Modell auf die verschiedenen Testdaten nicht overfittet.
+Wie wir hier sehen sind die Variationen der Precision eher klein. Die ähnlichsten Precision Resultate hat der Decision Tree.
+
+
 ## Vergleich der Top-N-Listen
 
 Hier vergleichen wir die Top-N-Listen der Modelle.
@@ -1964,73 +1974,90 @@ Für jedes Modell wird eine Top-20 Liste der Kunden vom ersten und letzten Valid
 All diese Kunden müssten demnach Käufer sein.
 In den beiden Tabellen stellen wir dar, ob die Modelle auf den jeweiligen Positionen recht behalten haben oder nicht.
 
-(RandomForest liefert oft die gleichen Werte)
-
 ```{r}
-users <- val_sets[[10]]
 
-users$prediction <- decision_tree_predictions[[10]]
-Decision_Tree <- head(users %>% arrange(desc(prediction)), 20)$has_card
+df <- data.frame()
 
-users$prediction <- xg_boost_predictions[[10]]
-XGBoost <- head(users %>% arrange(desc(prediction)), 20)$has_card
+for(i in 1:10)
+{
+  users <- val_sets[[i]]
+
+  users$prediction <- decision_tree_predictions[[i]]
+  Decision_Tree <- head(users %>% arrange(desc(prediction)), 20)$has_card
+
+  users$prediction <- xg_boost_predictions[[i]]
+  XGBoost <- head(users %>% arrange(desc(prediction)), 20)$has_card
 
 
-users$prediction <- regression_all_predictions[[10]]
-Regression <- head(users %>% arrange(desc(prediction)), 20)$has_card
+  users$prediction <- regression_all_predictions[[i]]
+  Regression <- head(users %>% arrange(desc(prediction)), 20)$has_card
 
 
-users$prediction <- random_forest_predictions[[10]]
-RandomForest <- head(users %>% arrange(desc(prediction)), 20)$has_card
+  users$prediction <- random_forest_predictions[[i]]
+  RandomForest <- head(users %>% arrange(desc(prediction)), 20)$has_card
 
-df <- data.frame(Regression, Decision_Tree, RandomForest, XGBoost)
+  df_new <- data.frame(Regression, Decision_Tree, RandomForest, XGBoost)
+  df_new[] <- lapply(df_new, as.numeric)
+  # get 1 for inaccurate
+  df_new[] = 1 - df_new[]
+  if(dim(df)[1] == 0)
+  {
+    df <- df_new  
+  }
+  else
+  {
+    df <- as.data.frame(as.matrix(df) + as.matrix(df_new))
+  }
+  #print(i)
+}
 
 df
 ```
 
-```{r}
-users <- val_sets[[1]]
+In dieser Darstellungen sind die Anzahl Fehlklassifikationen auf alle 10 Cross Validation Datensätze aufsummiert. Das perfekte Modell hätte auf allen Werten eine 0, also auf allen Top-N Vorhersagen keine Fehler gemacht.
 
-users$prediction <- decision_tree_predictions[[1]]
-Decision_Tree <- head(users %>% arrange(desc(prediction)), 20)$has_card
+Betrachten wir nur die Falschklassifikationen der Top-3 Vorhersagen, sehen wir, dass "Random Forest" und "XGBoost" am besten abschneiden. Der "Decision Tree" und die "logistische Regression" haben auf die Top-3 Vorhersagen drei oder mehr falsche Vorhersagen gemacht, die Forest Modelle nur null bis einen. XGBoost schneidet hier am besten ab.
 
-users$prediction <- xg_boost_predictions[[1]]
-XGBoost <- head(users %>% arrange(desc(prediction)), 20)$has_card
-
-
-users$prediction <- regression_all_predictions[[1]]
-Regression <- head(users %>% arrange(desc(prediction)), 20)$has_card
-
-
-users$prediction <- random_forest_predictions[[1]]
-RandomForest <- head(users %>% arrange(desc(prediction)), 20)$has_card
-
-df <- data.frame(Regression, Decision_Tree, RandomForest, XGBoost)
-
-df
-```
 
 ## Konfusionsmatrizen
 
 Auch die Konfusionsmatrizen werden wieder für die verschiedenen Modelle dargestllt.
 
 ```{r}
-plot_confusion_matrix(regression_all_predictions_threshold[[7]], val_sets[[7]]$has_card, "Regression")
-plot_confusion_matrix(decision_tree_predictions_threshold[[7]], val_sets[[7]]$has_card, "Decision Tree")
-plot_confusion_matrix(random_forest_predictions_threshold[[7]], val_sets[[7]]$has_card, "Random Forest")
-plot_confusion_matrix(xg_boost_predictions_threshold[[7]], val_sets[[7]]$has_card, "XGBoost")
+id_set <- 7
+
+plot_confusion_matrix(regression_all_predictions_threshold[[id_set]], val_sets[[id_set]]$has_card, "Regression")
+plot_confusion_matrix(decision_tree_predictions_threshold[[id_set]], val_sets[[id_set]]$has_card, "Decision Tree")
+plot_confusion_matrix(random_forest_predictions_threshold[[id_set]], val_sets[[id_set]]$has_card, "Random Forest")
+plot_confusion_matrix(xg_boost_predictions_threshold[[id_set]], val_sets[[id_set]]$has_card, "XGBoost")
 ```
+
+Die Confusion Matritzen der Modelle sehen sich sehr grundsätzlich ähnlich. 
+Einzig bei der logistischen Regression sind die false-positive Werte höher als bei den übrigen Modellen.
+
 
 ## ROC Kurven
 
 ```{r}
+get_mean <- function(cv_results)
+{
+  res <- as.matrix(cv_results[[1]])
+  for(i in 2:length(cv_results))
+  {
+    res = res + as.matrix(cv_results[[i]])
+  }
+  return(as.numeric(res / length(cv_results)))
+}
+
 make_roc_plot_and_get_auc_list <- function(predictions, true_values)
 {
   colors <- c("blue", "red", "black", "green")
+  auc_scores <- c()
   for(i in 1:length(predictions))
   {
     roc_curve <- roc((as.numeric(true_values) - 1), as.numeric(predictions[[i]]))
     auc_score <- auc(roc_curve)
+    auc_scores = append(auc_scores, auc_score)
     if(i == 1)
     {
       plot(roc_curve, xlab = "False Positive Rate", ylab = "True Positive Rate", main ="ROC Curve", col=colors[i])
@@ -2040,14 +2067,25 @@ make_roc_plot_and_get_auc_list <- function(predictions, true_values)
       lines(roc_curve, xlab = "False Positive Rate", ylab = "True Positive Rate", main ="ROC Curve", col=colors[i])
     }
   }
-  legend("bottomright", legend=c("Logistic Regression", "Decision Tree", "Random Forest", "XGBoost"), col=colors, pch=4)
+  legend("bottomright", legend=c(
+    paste("Logistic Regression AUC:", round(auc_scores[1], 3)), 
+    paste("Decision Tree AUC:", round(auc_scores[2], 3)), 
+    paste("Random Forest AUC:", round(auc_scores[3], 3)), 
+    paste("XGBoost AUC:", round(auc_scores[4], 3))), col=colors, pch=4)
 }
 
-
-make_roc_plot_and_get_auc_list(list(regression_baseline_predictions[[7]], decision_tree_tuned_predictions[[7]], random_forest_tuned_predictions[[7]], xg_boost_predictions[[7]]), val_sets[[7]]$has_card)
+make_roc_plot_and_get_auc_list(list(regression_baseline_predictions[[id_set]], decision_tree_tuned_predictions[[id_set]], random_forest_tuned_predictions[[id_set]], xg_boost_predictions[[id_set]]), val_sets[[id_set]]$has_card)
 
 
 ```
+
+In dieser Grafik wurden die ROC Kurven der verschiedenen Modelle übereinander geplottet.
+Um dies auf den Trainingsdaten tun zu können, wurde ein zufälliges Train/Val Packet gewählt.
+
+Die ROC Kurve sollte sich möglichst weit von der grauen Linie entfernen, dies tut sie auch bei allen Modellen recht gut.
+Es ist schwierig visuell zu erkennen, ob nun XGBoost oder Random Forest sich weiter nach oben links entfernt.
+Durch den AUC wird deutlich, dass der Random Forest leicht die Nase vorn hat.
+
 
 ## Feature Importance
 
@@ -2076,9 +2114,36 @@ Lift Kurve?
 
 # Bestes Modell auf den Testdaten
 
+Das beste Modell bezüglich der errechneten Scores, des RUC/AUC ist der Random Forest.
+In der Top-N Analyse und der Confusion Matrix ist er mit der Beste und annähernd so performant wie XGBoost.
+In Folge wird nun der Random Forest auf allen Trainingsdaten trainiert und auf den Testdaten analysiert.
+
 ```{r}
+#refit
+train$has_card <- as.factor(train$has_card)
+
+random_forest_refit <- randomForest(has_card ~ ., data = train, method = "class", mtry = 100)
+
+random_forest_refit_predictions <- predict(random_forest_refit, test, type = "prob")[, 2]
+
+threshold <- 0.5
+
+random_forest_refit_predictions_threshold <- ifelse(random_forest_refit_predictions > threshold, TRUE, FALSE)
+
+random_forest_refit_metrics <- get_metrics(random_forest_refit_predictions_threshold, test$has_card, "Random Forest (Tuned)")
+random_forest_refit_metrics
 
 ```
+
+Die Scores auf dem Testdaten fallen wie zu erwarten war etwas tiefer aus als die gemittelten Train Scores.
+Die Accuracy bleibt jedoch noch über 0.8.
+
+
+```{r}
+make_roc_plot_and_get_auc(random_forest_refit_predictions, test$has_card)
+```
+
+Auch die ROC Kurve und der AUC Wert fällt etwas tiefer aus, ist jedoch vergleichbar wie das vorherige Sample aus dem train/val sample.
 
 ## Mit Off-Time
 
