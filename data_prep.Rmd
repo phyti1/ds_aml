@@ -2090,19 +2090,6 @@ Durch den AUC wird deutlich, dass der Random Forest leicht die Nase vorn hat.
 ## Feature Importance
 
 ```{r}
-
-only_numeric <- train %>% select_if(is.numeric)
-y <- factor(train$has_card, ordered = TRUE)
-
-explainer_rf <- explain(
-  model = xg_boost,
-  data = train %>% select(-has_card),
-  y = train$has_card
-  )
-
-```
-
-```{r}
 importance_matrix = xgb.importance(colnames(train_preds), model = xg_boost)
 xgb.plot.importance(importance_matrix[1:5,])
 
