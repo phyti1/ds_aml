@@ -1926,13 +1926,13 @@ metrics_all <- metrics_all %>% filter(model %in% chosen_models)
 metrics_all %>% group_by(model) %>% summarize_if(is.numeric, mean) %>% arrange(desc(precision))
 ```
 
-In dieser Darstellung sind die durchschnittlichen Scores über die Cross Validation pro Modell aufgezeigt.
+In dieser Darstellung sind die durchschnittlichen Scores über die Cross-Validation pro Modell aufgezeigt.
 
 Das beste Modell bezüglich Train CV-Score für die Precision ist der XGBoost, dicht gefolgt vom Decision Tree. Beim F1-Score hat der Decision Tree die Nase vorne. XGBoost, Random Forest und Decision Tree sind bei beiden Werten sehr nahe beieinander, nur die logistische Regression fällt zurück.
 
 ## Verteilungen der Precision
 
-Als nächstes schauen wir die Verteilungen der zehn Precision Werte an, welche durch die Kreuzvalidierung entstanden ist.
+Als Nächstes schauen wir die Verteilungen der zehn Precision Werte an, welche durch die Kreuzvalidierung entstanden ist.
 
 ```{r}
 ggplot(data = metrics_all, aes(x = model, y = precision)) +
@@ -1989,7 +1989,7 @@ df
 In dieser Darstellungen sind die Anzahl Fehlklassifikationen auf alle 10 Cross-Validation Datensätze aufsummiert.
 Das perfekte Modell hätte auf allen Werten eine 0, also auf allen Top-N Vorhersagen keine Fehler gemacht.
 
-Betrachten wir nur die Falschklassifikationen der Top-3 Vorhersagen, sehen wir, dass "Random Forest" und "XGBoost" am besten abschneiden. Der "Decision Tree" und die "logistische Regression" haben auf die Top-3 Vorhersagen drei oder mehr falsche Vorhersagen gemacht, die Forest Modelle nur null bis einen. XGBoost schneidet hier am besten ab.
+Betrachten wir nur die Falschklassifikationen der Top-3 Vorhersagen, sehen wir, dass "Random Forest" und "XGBoost" am besten abschneiden. Der "Decision Tree" und die "logistische Regression" haben auf die Top-3 Vorhersagen drei oder mehr falsche Vorhersagen gemacht, die Forest Modelle nur null bis zwei. XGBoost schneidet hier am besten ab.
 
 
 ## Konfusionsmatrizen
@@ -2008,11 +2008,9 @@ plot_confusion_matrix(xg_boost_tuned_predictions_threshold[[id_set]], val_sets[[
 Die Confusion Matritzen der Modelle sehen sich sehr grundsätzlich ähnlich.
 Einzig bei der logistischen Regression sind die false-positive Werte höher als bei den übrigen Modellen.
 
-Die Confusion Matritzen der Modelle Random Forest, Decision Tree und XGBoost sind sich sehr ähnlich. Einzig die Regression fällt wieder ab.
-
 ## ROC Kurven
 
-Als letztes schauen wir uns noch die ROC Kurven an.
+Als Letztes schauen wir uns noch die ROC Kurven an.
 
 ```{r}
 id_set <- 3
@@ -2118,7 +2116,7 @@ Das beste Modell bezüglich der errechneten Scores, des ROC/AUC ist der Random F
 In der Top-N Analyse und der Confusion Matrix ist er mit der Beste und annähernd so performant wie XGBoost.
 In Folge wird nun getestet, ob der Random Forest noch weiter reduziert werden könnte, ohne dass er grosse Performance-Verluste hat.
 Anschliessend trainieren wir ihn auf allen Trainingsdaten und analysieren ihn auf den bisher ungesehenen Testdaten.
-Bei den durchschnittlichen Metriken macht XGBoost das Rennen bezüglich Precision, unserer Zielvariabel. Diese ist aber nur minim besser als die Precision des Decision Trees. Dieser hat dafür einen höheren F1-Score. Bei Streuung der verschiedenen Werte ist Decision Tree der konstanteste. Auch der Median der Precision ist beim Decision Tree nur knapp unter dem XGBoost. Bei den Konfusionsmatrix ist kein Favorit auszumachen. Bei der ROC-Kurve sind der Random Forest und der XGBoost die Gewinner.
+Bei den durchschnittlichen Metriken macht XGBoost das Rennen bezüglich Precision, unserer Zielvariabel. Diese ist aber nur minim besser als die Precision des Decision Trees. Dieser hat dafür einen höheren F1-Score. Bei Streuung der verschiedenen Werte ist Decision Tree der Konstanteste. Auch der Median der Precision ist beim Decision Tree nur knapp unter dem XGBoost. Bei den Konfusionsmatrix ist kein Favorit auszumachen. Bei der ROC-Kurve sind der Random Forest und der XGBoost die Gewinner.
 
 Die Favoriten sind also XGBoost und Decision Tree. Da die Interpretierbarkeit des Decision Trees viel höher ist (einerseits dank dem Modellalgorithmus selber, andererseits dank den wenigen verwendeten Features) und er abgesehen von der ROC-Kurve fast identische Werte wie der XGBoost liefert, haben wir uns dafür entschieden, den Decision Tree als unser bestes Modell zu wählen.
 
@@ -2126,7 +2124,7 @@ In Folge wird nun versucht, ob der Decision Tree sogar noch weiter reduziert wer
 
 ## Reduzieren des besten Modelles
 
-Wir versuchen, anhand der Feature-Importance-Liste des Decison Trees, herauszufinden, ob das Modell mit weniger Variabeln eine gleich gute Vorhersage machen kann. Dafür starten wir mit dem wichtigsten Feature und fügen immer ein neues hinzu. Dabei messen wir überall die Precision und den F1-Score anhand der Kreuzvalidierung. So sehen wir, wie stark das Modell einbüsst, wenn wir Features entfernen.
+Wir versuchen, anhand der Feature-Importance-Liste des Decison Trees, herauszufinden, ob das Modell mit weniger Variabeln eine gleich gute Vorhersage erreichen kann. Dafür starten wir mit dem wichtigsten Feature und fügen immer ein neues hinzu. Dabei messen wir überall die Precision und den F1-Score anhand der Kreuzvalidierung. So sehen wir, wie stark das Modell einbüsst, wenn wir Features entfernen.
 
 ```{r}
 precisions <- c()
@@ -2233,7 +2231,7 @@ final_model_reduced <- rpart(has_card ~ ., data = train %>% select(all_of(most_i
   get_metrics(final_model_reduced_predictions_threshold, test$has_card, "Final Model Refit Random")
 ```
 
-Wir hatten recht: Die Metriken werden höher. Vor allem die Precision profitiert von dem anderen Train-Test-Split. Aber auch wennn diese Scores hier höher sind, ist die Off-Time Variante die sinnvollere für eine reale Anwendung. Es müssen immer Zeitpunkte in der Zukunft vorhergesagt werden. 
+Wir hatten recht: Die Metriken werden höher. Vor allem die Precision profitiert von dem anderen Train-Test-Split. Aber auch wennn diese Scores hier höher sind, ist die Off-Time Variante die Sinnvollere für eine reale Anwendung. Es müssen in Realität immer Zeitpunkte in der Zukunft vorhergesagt werden. 
 
 # Schlusswort
 
