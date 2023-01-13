@@ -83,15 +83,13 @@ transactions <- read.csv(paste0(root_path, "trans.csv"), header = TRUE, sep = ";
 sample_n(accounts, 5)
 ```
 
-Die Account-Tabelle enthält vier Kolonnen: die Account-ID, die District-ID (welche auf die District-Tabelle verweist), die Frequenz, welche die Häufigkeit der Ausstellung der Abrechnungen als Kategorie besagt, und das Erstellungsdatum des Accounts.
-Die Frequenz kann eine von drei verschiedenen Werten annehmen.
+Die Account-Tabelle enthält vier Kolonnen: die Account-ID, die District-ID (welche auf die District-Tabelle verweist), die Frequenz, welche die Häufigkeit der Ausstellung der Abrechnungen als Kategorie besagt, und das Erstellungsdatum des Accounts. Die Frequenz kann eine von drei verschiedenen Werten annehmen.
 
 ```{r}
 unique(accounts$frequency)
 ```
 
-Nachfolgend sollen die Frequenz-Werte übersetzt und das Datum in ein richtiges Format transformiert werden.
-Ausserdem soll die Tabelle auf fehlende Werte überprüft werden.
+Nachfolgend sollen die Frequenz-Werte übersetzt und das Datum in ein richtiges Format transformiert werden. Ausserdem soll die Tabelle auf fehlende Werte überprüft werden.
 
 ```{r}
 accounts$date <- as.Date(as.character(accounts$date), format= "%y%m%d")
@@ -111,11 +109,9 @@ Wie hier gezeigt wurde, gibt es keine fehlende Werte in diesem Dataframe.
 sample_n(cards, 5)
 ```
 
-Die Card-Tabelle enthält die Kolonnen Card-ID, Disp-ID (welche auf die Dispositon-Tabelle verweist), den Typ der Karte und das Ausstellungsdatum.
-Auch hier muss das Datum umgewandelt werden.
-Der zeitliche Teil wird ignoriert, da er immer 0 ist.
-Weiter werden Gold-Karten zu normalen Karten umgewandelt und Junior-Karten entfernt, da unser Modell das Kaufen einer normalen Karte vorhersagen soll.
-Auch hier werden wieder die fehlenden Werte geprüft.
+Die Card-Tabelle enthält die Kolonnen Card-ID, Disp-ID (welche auf die Dispositon-Tabelle verweist), den Typ der Karte und das Ausstellungsdatum. Auch hier muss das Datum umgewandelt werden. Der zeitliche Teil wird ignoriert, da er immer 0 ist.
+
+Weiter werden Gold-Karten zu normalen Karten umgewandelt und Junior-Karten entfernt, da unser Modell das Kaufen einer normalen Karte vorhersagen soll. Auch hier werden wieder die fehlenden Werte geprüft.
 
 ```{r}
 cards$issued <- as.Date(as.character(cards$issued), format= "%y%m%d")
@@ -134,13 +130,9 @@ Es gibt keine fehlende Werte, welche weitere Aktionen erfordern würden.
 sample_n(clients, 10)
 ```
 
-Die Tabelle Clients enthält die Client-ID, das Geburtsdatum und die District-ID (welche auf die District-Tabelle verweist).
-Der Spalte Geburtsdatum sieht man auf den ersten Blick die Datumsräpresentation nicht an.
-In der Doku wird aber die Struktur ersichtlich: Das Datumsformat ist für Männer YYMMDD und für Frauen YYMMDD+50DD.
+Die Tabelle Clients enthält die Client-ID, das Geburtsdatum und die District-ID (welche auf die District-Tabelle verweist). Der Spalte Geburtsdatum sieht man auf den ersten Blick die Datumsräpresentation nicht an. In der Doku wird aber die Struktur ersichtlich: Das Datumsformat ist für Männer YYMMDD und für Frauen YYMMDD+50DD.
 
-In Folge wird die Nummer in ihre Datumsräpresentation konvertiert und die Spalte "gender" als male/female aufgeschlüsselt.
-Zudem wird das Alter der Kunden im Jahr 1999 berechnet, da der Datensatz aus diesem Jahr stammt.
-Anschliessend kann das Geburtsdatum entfernt werden.
+In Folge wird die Nummer in ihre Datumsräpresentation konvertiert und die Spalte "gender" als male/female aufgeschlüsselt. Zudem wird das Alter der Kunden im Jahr 1999 berechnet, da der Datensatz aus diesem Jahr stammt. Anschliessend kann das Geburtsdatum entfernt werden.
 
 Ausserdem werden auch hier wieder die fehlenden Werte überprüft.
 
@@ -187,8 +179,7 @@ sum(is.na(clients))
 
 Auch hier gibt es keine fehlenden Werte, welche untersucht werden müssten.
 
-Jugendliche und Personen, welche während des Zeitraums des Datensatzes erst erwachsen worden sind, sollen nicht in die Auswertung einfliessen.
-Da sich der Datensatz über einen Zeitraum von sechs Jahren erstreckt, werden alle Clients jünger als 25 Jahre herausgefiltert.
+Jugendliche und Personen, welche während des Zeitraums des Datensatzes erst erwachsen worden sind, sollen nicht in die Auswertung einfliessen. Da sich der Datensatz über einen Zeitraum von sechs Jahren erstreckt, werden alle Clients jünger als 25 Jahre herausgefiltert.
 
 ```{r}
 clients <- clients %>% filter(age >= 25)
@@ -200,10 +191,7 @@ clients <- clients %>% filter(age >= 25)
 sample_n(dispositions, 5)
 ```
 
-Die Tabelle Dispostions enthält die Disposition-ID, die Client-ID (welche auf die Tabelle Clients verweist), die Account-ID (welche auf die Tabelle Accounts verweist) und den Typ der Disposition.
-Disposition steht dabei für die Rechte eines Kunden für ein gewisses Konto.
-Hier sollen nur Owners verwendet werden, da die Analyse nur Eigentümer von Konten behandeln soll.
-Da der Type dann für jede Dispostion der gleiche ist, wird diese Variable entfernt.
+Die Tabelle Dispostions enthält die Disposition-ID, die Client-ID (welche auf die Tabelle Clients verweist), die Account-ID (welche auf die Tabelle Accounts verweist) und den Typ der Disposition. Disposition steht dabei für die Rechte eines Kunden für ein gewisses Konto. Hier sollen nur Owners verwendet werden, da die Analyse nur Eigentümer von Konten behandeln soll. Da der Type dann für jede Dispostion der gleiche ist, wird diese Variable entfernt.
 
 ```{r}
 dispositions <- dispositions %>% filter(type == 'OWNER')
@@ -220,9 +208,7 @@ Auch hier gibt es keine fehlenden Werte, welche genauer untersucht werden müsst
 sample_n(districts, 5)
 ```
 
-Die Tabelle Districts enthält demographische Informationen über verschiedene Gebiete.
-Die Spaltennamen sind hier nur nummeriert und müssen richtig benannt werden.
-Dies können wir anhand der Doku machen.
+Die Tabelle Districts enthält demographische Informationen über verschiedene Gebiete. Die Spaltennamen sind hier nur nummeriert und müssen richtig benannt werden. Dies können wir anhand der Doku machen.
 
 ```{r}
 districts <- rename(districts, district_id = A1, district_name = A2, region = A3, 
@@ -249,8 +235,7 @@ sample_n(transactions, 5)
 Die Transaktions-Tabelle enthält die Kolonnen Transaktions-ID, Account-ID (welche auf die Tabelle Accounts verweist), Date (das Datum der Transaktion), Type (den Typ der Transaktion), Operation und k_symbol (weitere kategorische Informationen über die Transaktion), Amount (der absolute Wert der Transaktion), Balance (der neue Kontostand) und Informationen über die Bank und den Account.
 
 In den Transaktionen muss das Datum gemäss Format YYMMDD konvertiert und die verschiedenen tschechischen Ausdrücke übersetzt werden.
-"VYDAJ" heisst übersetzt Ausgabe, "VYBER" Entnahme.
-Wir übersetzen hier beide Begriffe mit dem Wert "withdrawal".
+"VYDAJ" heisst übersetzt Ausgabe, "VYBER" Entnahme. Wir übersetzen hier beide Begriffe mit dem Wert "withdrawal".
 
 ```{r}
 # Change formats
@@ -280,9 +265,7 @@ transactions$k_symbol[transactions$k_symbol == "UVER"]  <- "loan_pay"
 sum(is.na(transactions))
 ```
 
-In dieser Spalte gibt es eine grosse Anzahl fehlender Werte.
-Bereits im Sample ist ersichtlich, dass bei den Kolonnen bank, k_symbol und account fehlende Werte als NA oder als leerer string vorkommen.
-Der Anteil fehlender Werte soll als nächstes untersucht werden.
+In dieser Spalte gibt es eine grosse Anzahl fehlender Werte. Bereits im Sample ist ersichtlich, dass bei den Kolonnen bank, k_symbol und account fehlende Werte als NA oder als leerer string vorkommen. Der Anteil fehlender Werte soll als nächstes untersucht werden.
 
 ```{r}
 missing_bank_percentage = round(sum(transactions$bank == '') * 100 / dim(transactions)[1], 2)
@@ -294,8 +277,7 @@ print(paste("In der Kolonne k_symbol fehlen", missing_k_symbol_percentage, "% de
 print(paste("In der Kolonne Account fehlen", missing_account_percentage, "% der Werte."))
 ```
 
-Bei den Kolonnen bank und account fehlen fast drei Viertel der Werte, bei k_symbol beinahe die Hälfte.
-Daher haben wir uns entschieden, diese Kolonnen vom Dataframe zu entfernen.
+Bei den Kolonnen bank und account fehlen fast drei Viertel der Werte, bei k_symbol beinahe die Hälfte. Daher haben wir uns entschieden, diese Kolonnen vom Dataframe zu entfernen.
 
 ```{r}
 transactions$bank <- NULL
@@ -309,10 +291,7 @@ Jetzt schauen wir uns nochmals die fehlenden Werte an.
 sum(is.na(transactions))
 ```
 
-Durch das Entfernen der drei Spalten konnten alle fehlenden Werte entfernt werden.
-Nun besteht aber noch das Problem, dass der angegebene Betrag der Transaktionen immer positiv ist, auch wenn das Vermögen sinkt.
-Wir gehen also davon aus, dass immer der absolute Wert in diesere Kolonne erfasst ist.
-Dies müssen wir noch bereinigen, so dass der Betrag auch negativ sein kann.
+Durch das Entfernen der drei Spalten konnten alle fehlenden Werte entfernt werden. Nun besteht aber noch das Problem, dass der angegebene Betrag der Transaktionen immer positiv ist, auch wenn das Vermögen sinkt. Wir gehen also davon aus, dass immer der absolute Wert in diesere Kolonne erfasst ist. Dies müssen wir noch bereinigen, so dass der Betrag auch negativ sein kann.
 
 Glücklicherweise gibt es eine weitere Information, welche uns bei diesem Problem weiterhilft: Die Variable "type".
 
@@ -320,11 +299,7 @@ Glücklicherweise gibt es eine weitere Information, welche uns bei diesem Proble
 unique(transactions$type)
 ```
 
-Es gibt nur zwei Transaktionstypen: income und withdrawal.
-Diese geben an, ob Geld auf das Konto fliesst oder entnommen wird.
-Bei Transaktionen mit Typ "withdrawal" kann also der Betrag negiert werden.
-Wir fügen die neuen Variabeln "difference" und "prev_balance" hinzu.
-Sie beschreiben den Betrag mit entsprechendem Vorzeichen und den Kontostand vor der Transaktion.
+Es gibt nur zwei Transaktionstypen: income und withdrawal. Diese geben an, ob Geld auf das Konto fliesst oder entnommen wird. Bei Transaktionen mit Typ "withdrawal" kann also der Betrag negiert werden. Wir fügen die neuen Variabeln "difference" und "prev_balance" hinzu. Sie beschreiben den Betrag mit entsprechendem Vorzeichen und den Kontostand vor der Transaktion.
 
 ```{r}
 df <- transactions
@@ -361,10 +336,7 @@ sample_n(transactions, 5)
 
 ## Orders
 
-Die Tabelle Orders enthält Informationen über einen Zahlungsauftrag.
-Sie enthällt die Kolonnen Order-ID, Account-ID (welche auf die Tabelle Accounts verweist), Bank-To (welche beschreibt, an welche Bank die Zahlung geht), Account-To (welche auf die Tabelle Accounts verweist und den Empfänger der Zahlung angibt), Amount (den Betrag der Zahlung) und k_symbol (den Typ der Transaktion).
-Die Werte in der Spalte k_symbol sollen wieder übersetzt werden.
-Fehlende Werte sollen hier mit "unknown" ersetzt werden.
+Die Tabelle Orders enthält Informationen über einen Zahlungsauftrag. Sie enthällt die Kolonnen Order-ID, Account-ID (welche auf die Tabelle Accounts verweist), Bank-To (welche beschreibt, an welche Bank die Zahlung geht), Account-To (welche auf die Tabelle Accounts verweist und den Empfänger der Zahlung angibt), Amount (den Betrag der Zahlung) und k_symbol (den Typ der Transaktion). Die Werte in der Spalte k_symbol sollen wieder übersetzt werden. Fehlende Werte sollen hier mit "unknown" ersetzt werden.
 
 ```{r}
 sample_n(orders, 5)
@@ -395,10 +367,7 @@ Auch hier gibt es keine fehlenden Werte.
 sample_n(loans, 5)
 ```
 
-Die Tabelle Loans enthält Informationen über Darlehen der verschiedenen Accounts.
-Dabei stehen uns Informationen wie das Datum, die Höhe, die Dauer, der Betrag der zahlungen und den Status der Darlehen zur Verfügung.
-Auch hier soll wieder das Datumsformat geändert und der Status der Darlehen in einen besser lesbaren Wert umgewandelt werden.
-Die Informationen über die verschiedenen Status sind der Dokumentation des Datensatzes zu entnehmen.
+Die Tabelle Loans enthält Informationen über Darlehen der verschiedenen Accounts. Dabei stehen uns Informationen wie das Datum, die Höhe, die Dauer, der Betrag der zahlungen und den Status der Darlehen zur Verfügung. Auch hier soll wieder das Datumsformat geändert und der Status der Darlehen in einen besser lesbaren Wert umgewandelt werden. Die Informationen über die verschiedenen Status sind der Dokumentation des Datensatzes zu entnehmen.
 
 ```{r}
 loans$date <- as.Date(as.character(loans$date), format= "%y%m%d")
@@ -418,9 +387,7 @@ Auch hier gibt es keine fehlenden Werte.
 
 # Zusammenfügen der Dataframes
 
-Als Nächstes fassen wir die Dataframes zu einem grossen Dataframe zusammen, damit wir später Modelle darauf trainieren können.
-Dabei müssen wir überprüfen, ob es sich bei den Verbindungen der verschiedenen Tabellen um n zu n Beziehungen handelt.
-Wir starten mit der Tabelle Clients und fügen immer mehr Tabellen hinzu.
+Als Nächstes fassen wir die Dataframes zu einem grossen Dataframe zusammen, damit wir später Modelle darauf trainieren können. Dabei müssen wir überprüfen, ob es sich bei den Verbindungen der verschiedenen Tabellen um n zu n Beziehungen handelt. Wir starten mit der Tabelle Clients und fügen immer mehr Tabellen hinzu.
 
 ## Clients und Dispositions
 
@@ -429,16 +396,13 @@ print(paste("Anzahl Kunden in Clients:", dim(clients)[1]))
 print(paste("Anzahl Dispositions:", dim(dispositions)[1]))
 ```
 
-Es gibt also weniger Dispositions als Clients.
-Aber gibt es Clients mit mehreren Dispositions?
+Es gibt also weniger Dispositions als Clients. Aber gibt es Clients mit mehreren Dispositions?
 
 ```{r}
 dim(dispositions)[1] - length(unique(dispositions$client_id))
 ```
 
-Nein, es gibt keine Clients mit mehreren Dispositionen.
-Wir können also die beiden Dataframes anhand eines Inner-Joins miteinander verbinden, verlieren dabei aber mehr als 600 Kunden.
-Diese Kunden sind für uns sowieso irrelevant, da sie keine Konten besitzen.
+Nein, es gibt keine Clients mit mehreren Dispositionen. Wir können also die beiden Dataframes anhand eines Inner-Joins miteinander verbinden, verlieren dabei aber mehr als 600 Kunden. Diese Kunden sind für uns sowieso irrelevant, da sie keine Konten besitzen.
 
 ```{r}
 full <- inner_join(clients, dispositions, by = "client_id", suffix = c(".client", ".dispositions"))
@@ -453,8 +417,7 @@ Es bleiben also 3858 Kunden.
 print(paste("Anzahl Accounts:", dim(accounts)[1]))
 ```
 
-Es gibt also gleich viele Accounts wie Dispositionen.
-Auch hier soll wieder überprüft werden, ob jeder Account genau einen Owner hat.
+Es gibt also gleich viele Accounts wie Dispositionen. Auch hier soll wieder überprüft werden, ob jeder Account genau einen Owner hat.
 
 ```{r}
 # Count the number of dispositions per client
@@ -466,8 +429,7 @@ summary <- table(acc_counts$n)
 summary
 ```
 
-Jeder Account hat genau einen Owner.
-Das Dataframe Accounts kann also zu unserem grossen Dataframe hinzugefügt werden.
+Jeder Account hat genau einen Owner. Das Dataframe Accounts kann also zu unserem grossen Dataframe hinzugefügt werden.
 
 ```{r}
 full <- inner_join(full, accounts, by = "account_id", suffix = c("", ".accounts"))
@@ -482,19 +444,13 @@ Unser Dataframe hat immer noch eine Länge von 3858 Zeilen oder Kunden.
 print(paste("Anzahl Loans:", dim(loans)[1]))
 ```
 
-Es gibt nur 682 Loans.
-Das bedeutet, dass nicht jeder Kunde ein Darlehen hat, was Sinn ergibt.
-Weiter soll noch überprüft werden, ob es Kunden gibt, welche mehrere Darlehen haben.
+Es gibt nur 682 Loans. Das bedeutet, dass nicht jeder Kunde ein Darlehen hat, was Sinn ergibt. Weiter soll noch überprüft werden, ob es Kunden gibt, welche mehrere Darlehen haben.
 
 ```{r}
 dim(loans)[1] - length(unique(loans$account_id))
 ```
 
-Es gibt also keine Kunden, welche mehrere Darlehen bezogen haben.
-Die Loans sollen an das gesamte Dataframe mittels Left Join agehängt werden.
-So gibt es Kunden, welche keine Loans haben und die Variabeln den Wert NA haben.
-Bei diesen sollen die fehlenden numerischen Werte durch 0 ersetzt und der Status auf "no_loan" geändert werden.
-Das Datum des Loans entfernen wir.
+Es gibt also keine Kunden, welche mehrere Darlehen bezogen haben. Die Loans sollen an das gesamte Dataframe mittels Left Join agehängt werden. So gibt es Kunden, welche keine Loans haben und die Variabeln den Wert NA haben. Bei diesen sollen die fehlenden numerischen Werte durch 0 ersetzt und der Status auf "no_loan" geändert werden. Das Datum des Loans entfernen wir.
 
 ```{r}
 full <- left_join(full, loans, by = "account_id", suffix = c("", ".loans"))
@@ -515,13 +471,9 @@ print(paste("Anzahl Cards:", dim(cards)[1]))
 length(unique(cards$disp_id))
 ```
 
-Es gibt 747 Kunden mit Karten, kein Kunde hat mehrere Karten.
-Es macht wieder Sinn, dass nicht alle Kunden eine Karte habe.
-Der Kartentyp ist immer gleich.
+Es gibt 747 Kunden mit Karten, kein Kunde hat mehrere Karten. Es macht wieder Sinn, dass nicht alle Kunden eine Karte habe. Der Kartentyp ist immer gleich.
 
-Daher wird in Folge der Typ der Karte durch den boolschen Wert "has_card" ersetzt.
-Dies wird auch unsere Zielvariabel in den Modellen sein.
-Auch die Card-ID kann entfernt werden.
+Daher wird in Folge der Typ der Karte durch den boolschen Wert "has_card" ersetzt. Dies wird auch unsere Zielvariabel in den Modellen sein. Auch die Card-ID kann entfernt werden.
 
 ```{r}
 full <- left_join(full, cards, by = "disp_id", suffix = c("", ".cards"))
@@ -550,16 +502,11 @@ print(paste("Anzahl Orders:", dim(orders)[1]))
 length(unique(orders$account_id))
 ```
 
-Es gibt 6471 Orders für 3758 Kunden.
-Das bedeutet, dass es Kunden gibt, welche mehrere Orders haben.
-Diese Informationen müssen wir zu einer Row zusammenfassen.
+Es gibt 6471 Orders für 3758 Kunden. Das bedeutet, dass es Kunden gibt, welche mehrere Orders haben. Diese Informationen müssen wir zu einer Row zusammenfassen.
 
-Dabei haben wir uns dafür entschieden, die Variabeln account_to und amount nicht in den Gesamtdatensatz einfliessen zu lassen.
-Der amount ist bereits in den Transaktionen inbegriffen.
-An wen die Zahlungen gehen, sollte keinen Einfluss auf unser Modell haben.
+Dabei haben wir uns dafür entschieden, die Variabeln account_to und amount nicht in den Gesamtdatensatz einfliessen zu lassen. Der amount ist bereits in den Transaktionen inbegriffen. An wen die Zahlungen gehen, sollte keinen Einfluss auf unser Modell haben.
 
-Also bleiben uns noch die Variabeln "characterization" und "bank_to".
-Zuerst schauen wir uns an, wie viele verschiedene Werte diese beiden Variabeln annehmen können.
+Also bleiben uns noch die Variabeln "characterization" und "bank_to". Zuerst schauen wir uns an, wie viele verschiedene Werte diese beiden Variabeln annehmen können.
 
 ```{r}
 unique(orders$characterization)
@@ -571,13 +518,9 @@ unique(orders$bank_to)
 length(unique(orders$bank_to))
 ```
 
-Bei diesen beiden Variabeln gibt es nur 5 bzw.
-13 verschiedene Ausprägungen.
-Wir können also diese Werte wie folgt an den grossen Datensatz anfügen:
+Bei diesen beiden Variabeln gibt es nur 5 bzw. 13 verschiedene Ausprägungen. Wir können also diese Werte wie folgt an den grossen Datensatz anfügen:
 
-Für jede Ausprägung der Spalte gibt es eine neue Kolonne.
-Diese Kolonne nimmt den Wert der Anzahl der Orders mit dieser "characterization" bzw.
-"bank_to" an.
+Für jede Ausprägung der Spalte gibt es eine neue Kolonne. Diese Kolonne nimmt den Wert der Anzahl der Orders mit dieser "characterization" bzw. "bank_to" an.
 
 ```{r}
 characterizations <- orders %>%
@@ -603,8 +546,7 @@ orders[is.na(orders)] <- 0
 full <- left_join(full, orders, by = "account_id")
 ```
 
-Die fehlenden Werte in diesen Kolonnen müssen jetzt noch mit 0 ersetzt werden.
-Der Einfachheit halber setzen wir diese Werte hardcoded.
+Die fehlenden Werte in diesen Kolonnen müssen jetzt noch mit 0 ersetzt werden. Der Einfachheit halber setzen wir diese Werte hardcoded.
 
 ```{r}
 full$household[is.na(full$household)] <- 0
@@ -629,16 +571,13 @@ full$YZ[is.na(full$YZ)] <- 0
 
 ## Districts
 
-Jeder Kunde sowie jeder Account ist einem Gebiet zugewiesen.
-Zuerst überprüfen wir, ob es sich dabei immer um dasselbe Gebiet handelt.
+Jeder Kunde sowie jeder Account ist einem Gebiet zugewiesen. Zuerst überprüfen wir, ob es sich dabei immer um dasselbe Gebiet handelt.
 
 ```{r}
 sum(full$district_id != full$district_id.accounts)
 ```
 
-349 Personen haben ihren Account also in einem anderen Distrikt, als sie zugewiesen sind.
-Wir müssen die District-Informationen für beide District-ID's zuweisen.
-Dies machen wir wieder mit Left-Joins.
+349 Personen haben ihren Account also in einem anderen Distrikt, als sie zugewiesen sind. Wir müssen die District-Informationen für beide District-ID's zuweisen. Dies machen wir wieder mit Left-Joins.
 
 ```{r}
 full <- left_join(full, districts, by = "district_id")
@@ -646,8 +585,7 @@ full <- left_join(full, districts, by = "district_id")
 full <- left_join(full, districts, by = c("district_id.accounts"="district_id"), suffix = c("", ".accounts"))
 ```
 
-Zum Schluss können die verschiedenen ID's entfernt werden, da sie irrelevant für das Modell sind und nicht mehr gebraucht werden.
-Einzig die Account-ID wird im Datensatz behalten, damit die Transaktionen hinzugefügt werden können.
+Zum Schluss können die verschiedenen ID's entfernt werden, da sie irrelevant für das Modell sind und nicht mehr gebraucht werden. Einzig die Account-ID wird im Datensatz behalten, damit die Transaktionen hinzugefügt werden können.
 
 ```{r}
 full <- full %>% select(-client_id, -district_id, -disp_id, -district_id.accounts, -loan_id)
@@ -663,9 +601,7 @@ Er beinhaltet 3858 Kunden mit 59 verschiedenen Merkmalen.
 
 ## Transactions
 
-Nun müssen nur noch die Transaktionsdaten zum Dataframe hinzugefügt werden.
-Diese müssen aber anders zusammengefasst werden, da jeder Kunde viele Transaktionen haben kann.
-Die Transaktionen werden für Kreditkartenkäufer und Nichtkäufer aggregiert, weshalb wir diese als Erstes anhand der Variable "has_card" trennen.
+Nun müssen nur noch die Transaktionsdaten zum Dataframe hinzugefügt werden. Diese müssen aber anders zusammengefasst werden, da jeder Kunde viele Transaktionen haben kann. Die Transaktionen werden für Kreditkartenkäufer und Nichtkäufer aggregiert, weshalb wir diese als Erstes anhand der Variable "has_card" trennen.
 
 ```{r}
 card_buyers <- full %>% filter(has_card == TRUE)
@@ -679,10 +615,7 @@ Es gibt 706 Kreditkartenkäufer und 3152 Nichtkäufer.
 
 ### Aggregation der Transaktionen für Kreditkartenkäufer
 
-Bei den Kreditkartenkäufern ist der Zeitpunkt des Kreditkartenkaufs gegeben.
-Da unser Modell Vorhersagen soll, ob ein Kunde eine Kredikarte kauft, haben die Monate unmittelbar vor dem Kaufzeitpunkt den grössten Einfluss.
-Wir erstellen also für jeden Kreditkartenkäufer ein Rollup-Fenster für die letzten zwölf Monate vor dem Kauf der Kreditkare, vor einem einmonatigen Lag Fenster unmittelbar vor dem Kaufdaum.
-Diesen Monat beachten wir nicht, da die Bearbeitung eines Kreditkartenkaufs etwa zwei bis vier Wochen dauern kann und sich der Kunde dementsprechend bereits vor dem Kaufdatum für eine Kreditkarte entschieden hat.
+Bei den Kreditkartenkäufern ist der Zeitpunkt des Kreditkartenkaufs gegeben. Da unser Modell Vorhersagen soll, ob ein Kunde eine Kredikarte kauft, haben die Monate unmittelbar vor dem Kaufzeitpunkt den grössten Einfluss. Wir erstellen also für jeden Kreditkartenkäufer ein Rollup-Fenster für die letzten zwölf Monate vor dem Kauf der Kreditkare, vor einem einmonatigen Lag Fenster unmittelbar vor dem Kaufdaum. Diesen Monat beachten wir nicht, da die Bearbeitung eines Kreditkartenkaufs etwa zwei bis vier Wochen dauern kann und sich der Kunde dementsprechend bereits vor dem Kaufdatum für eine Kreditkarte entschieden hat.
 
 Als Erstes werden dafür die Transaktionen von Kunden herausgefiltert, welche eine Kreditkarte haben.
 
@@ -711,9 +644,7 @@ filter_time_range <- function(df)
 filtered_df <- filter_time_range(buyer_transactions)
 ```
 
-Es existieren oft Monate, bei denen ein Kunde keine Transaktionen gemacht hat.
-Dies liegt entweder daran, dass der Kunde nicht viele Transaktionen tätigte oder die Kreditkarte bereits im ersten Jahr gekauft hat.
-In diesen Monaten werden in Folge jeweils eine leere Transaktion eingefügt, welche die Balance der letzten Transaktion des Vormonats trägt.
+Es existieren oft Monate, bei denen ein Kunde keine Transaktionen gemacht hat. Dies liegt entweder daran, dass der Kunde nicht viele Transaktionen tätigte oder die Kreditkarte bereits im ersten Jahr gekauft hat. In diesen Monaten werden in Folge jeweils eine leere Transaktion eingefügt, welche die Balance der letzten Transaktion des Vormonats trägt.
 
 ```{r}
 impute_missing_months <- function(filtered_df)
@@ -766,13 +697,9 @@ impute_missing_months <- function(filtered_df)
 filtered_df <- impute_missing_months(filtered_df)
 ```
 
-Bei 169 Kreditkartenkäufer ist kein komplettes 12-Monats-Rollup-Fenster vorhanden.
-Bei allen wurden die fehlenden Monate imputiert.
+Bei 169 Kreditkartenkäufer ist kein komplettes 12-Monats-Rollup-Fenster vorhanden. Bei allen wurden die fehlenden Monate imputiert.
 
-Nun werden diese Daten aggregiert.
-Es wird eine Gruppierung anhand der "account_id" und des Monats gemacht.
-Die Werte "difference" und "balance" auf verschiedene Arten aggregiert: Auf beiden Werten erfassen wir das Minimum, das Maximum, den Durchschnitt, den Median und die Standardabweichung.
-Bei "balance" erfassen wir den ersten und den letzten Wert des Monats und bei "difference" die Anzahl positive und negative Differenzen.
+Nun werden diese Daten aggregiert. Es wird eine Gruppierung anhand der "account_id" und des Monats gemacht. Die Werte "difference" und "balance" auf verschiedene Arten aggregiert: Auf beiden Werten erfassen wir das Minimum, das Maximum, den Durchschnitt, den Median und die Standardabweichung. Bei "balance" erfassen wir den ersten und den letzten Wert des Monats und bei "difference" die Anzahl positive und negative Differenzen.
 
 ```{r}
 get_summary_df <- function(filtered_df)
@@ -808,8 +735,7 @@ Diese Zusammenfassung sieht nun für jeden Kunden folgendermassen aus:
 summary_df %>% filter(account_id == 7)
 ```
 
-Für jeden Kunden gibt es nun für jeden Monat vor dem Kreditkartenkauf eine Zeile mit den aggregierten Daten des Monats.
-Wir überprüfen noch kurz, ob auch wirklich für jeden Kunden zwölf Monate vorhanden sind.
+Für jeden Kunden gibt es nun für jeden Monat vor dem Kreditkartenkauf eine Zeile mit den aggregierten Daten des Monats. Wir überprüfen noch kurz, ob auch wirklich für jeden Kunden zwölf Monate vorhanden sind.
 
 ```{r}
 get_incomplete_buyers <- function(summary_df)
@@ -828,10 +754,7 @@ month_counts <- get_incomplete_buyers(summary_df)
 print(paste("Anzahl Kunden mit weniger als 12 Monaten:", dim(month_counts)[1]))
 ```
 
-Jeder Kreditkartenkäufer hat also wirklich 12 Monate.
-Als nächstes wollen wir diese zwölf Rows pro Kunde zu einer Row umwandeln.
-Dafür nummerieren wir zunächst die Monate pro Kreditkartenkäufer von 1 bis 12 durch.
-Dabei ist der Monat 12 der letzte Monat vor dem Kaufdatum (abgesehen vom Lag-Monat).
+Jeder Kreditkartenkäufer hat also wirklich 12 Monate. Als nächstes wollen wir diese zwölf Rows pro Kunde zu einer Row umwandeln. Dafür nummerieren wir zunächst die Monate pro Kreditkartenkäufer von 1 bis 12 durch. Dabei ist der Monat 12 der letzte Monat vor dem Kaufdatum (abgesehen vom Lag-Monat).
 
 ```{r}
 set_month_ids <- function(summary_df)
@@ -861,8 +784,7 @@ summary_df <- set_month_ids(summary_df)
 
 ```
 
-Als nächstes brauchen wir pivot_wider.
-So haben wir jede Kennzahl zwölf mal als Kolonne, jedes Mal mit der vorher erstellten Monatsnummer als Suffix.
+Als nächstes brauchen wir pivot_wider. So haben wir jede Kennzahl zwölf mal als Kolonne, jedes Mal mit der vorher erstellten Monatsnummer als Suffix.
 
 ```{r}
 pivot_by_month <- function(summary_df)
@@ -893,18 +815,11 @@ summary_df_buyers <- merge(summary_df_wide, subset(card_buyers), by = "account_i
 
 ### Aggregation der Transaktionen für Nichtkäufer
 
-Für Nichtkäufer ist kein Datum des Kreditkartenkaufs gegeben, da sie ja keine gekauft haben.
-Es stellt sich also die Frage, von welchem Datum aus man das Rollup-Fenster erstellt.
+Für Nichtkäufer ist kein Datum des Kreditkartenkaufs gegeben, da sie ja keine gekauft haben. Es stellt sich also die Frage, von welchem Datum aus man das Rollup-Fenster erstellt.
 
-Wir haben uns dazu entschieden, für jeden Käufer einen möglichst ähnlichen Nichtkäufer zu finden.
-Dafür werden Nichtkäufer mit gleichem Geschlecht und gleicher Region gesucht.
-Das Kaufdatum des ähnlichen Käufers wird dann auf den Nichtkäufer übertragen.
-Ein weiteres Kriterium ist, dass der Nichtkäufer mindestens eine Transaktion in dem Rollup-Fenster haben muss.
-Jeder Nichtkäufer wird maximal einmal als Match genommen, damit keine doppelten Kunden im Datensatz vorkommen.
+Wir haben uns dazu entschieden, für jeden Käufer einen möglichst ähnlichen Nichtkäufer zu finden. Dafür werden Nichtkäufer mit gleichem Geschlecht und gleicher Region gesucht. Das Kaufdatum des ähnlichen Käufers wird dann auf den Nichtkäufer übertragen. Ein weiteres Kriterium ist, dass der Nichtkäufer mindestens eine Transaktion in dem Rollup-Fenster haben muss. Jeder Nichtkäufer wird maximal einmal als Match genommen, damit keine doppelten Kunden im Datensatz vorkommen.
 
-Durch dieses Vorgehen benutzen wir nur einen Teil der Nichtkäufer, haben aber direkte, ähnliche Vergleichspersonen, welche im gleichen Zeitraum keine Kreditkarten gekauft haben.
-Ausserdem bringt das Vorgehen auch den Vorteil, dass die Daten für das Modell automatisch Balanced sind.
-Dies macht das Trainieren des Modells einfacher, da es dazu beiträgt, dass das Modell nicht Biased gegenüber den Nichtkäufern wird.
+Durch dieses Vorgehen benutzen wir nur einen Teil der Nichtkäufer, haben aber direkte, ähnliche Vergleichspersonen, welche im gleichen Zeitraum keine Kreditkarten gekauft haben. Ausserdem bringt das Vorgehen auch den Vorteil, dass die Daten für das Modell automatisch Balanced sind. Dies macht das Trainieren des Modells einfacher, da es dazu beiträgt, dass das Modell nicht Biased gegenüber den Nichtkäufern wird.
 
 ```{r}
 pb <- txtProgressBar(min = 0, max = nrow(card_buyers), style = 3, width = 50, char = "=")
@@ -955,9 +870,7 @@ print(paste("Anzahl Buyers:", length(unique(card_buyers$account_id))))
 print(paste("Anzahl gefundene Matches:", length(unique(similar_non_buyers$account_id))))
 ```
 
-Wie hier sichtbar wird, konnte zu allen Kartenkäufer ein passender Nichtkäufer gefunden werden.
-Auf diesen sollen die Transaktionsdaten jetzt gleich wie bei den Kreditkartenkäufern aggregiert werden.
-Als erstes werden die Transaktionen wieder auf das gegebene Rollup-Fenster gefiltert.
+Wie hier sichtbar wird, konnte zu allen Kartenkäufer ein passender Nichtkäufer gefunden werden. Auf diesen sollen die Transaktionsdaten jetzt gleich wie bei den Kreditkartenkäufern aggregiert werden. Als erstes werden die Transaktionen wieder auf das gegebene Rollup-Fenster gefiltert.
 
 ```{r}
 # find missings
@@ -973,16 +886,14 @@ filtered_df <- impute_missing_months(filtered_df)
 summary_df_non_buyers <- get_summary_df(filtered_df)
 ```
 
-Auch hier haben 168 Kunden kein vollständiges Rollup-Fenster.
-Wir überprüfen wieder, ob für jeden Kunden alle 12 Monate vorhanden sind.
+Auch hier haben 168 Kunden kein vollständiges Rollup-Fenster. Wir überprüfen wieder, ob für jeden Kunden alle 12 Monate vorhanden sind.
 
 ```{r}
 month_counts <- get_incomplete_buyers(summary_df_non_buyers)
 print(paste("Anzahl Kunden mit weniger als 12 Monaten:", dim(month_counts)[1]))
 ```
 
-Die Imputation hat funktioniert, es gibt keine Kunden mit weniger als 12 Monaten.
-Nun werden die Daten wieder auf eine Row ausgeweitet und mit den anderen Informationen der Kunden zusammengefügt.
+Die Imputation hat funktioniert, es gibt keine Kunden mit weniger als 12 Monaten. Nun werden die Daten wieder auf eine Row ausgeweitet und mit den anderen Informationen der Kunden zusammengefügt.
 
 ```{r}
 summary_df_non_buyers <- set_month_ids(summary_df_non_buyers)
@@ -990,8 +901,7 @@ summary_df_wide <- pivot_by_month(summary_df_non_buyers)
 summary_df_non_buyers <- merge(summary_df_wide, similar_non_buyers, by = "account_id")
 ```
 
-Zum Schluss werden die Käufer und die Nichtkäufer in einem Datensatz kombiniert.
-Die Account-ID kann noch entfernt werden.
+Zum Schluss werden die Käufer und die Nichtkäufer in einem Datensatz kombiniert. Die Account-ID kann noch entfernt werden.
 
 ```{r}
 final_df <- rbind(summary_df_buyers, summary_df_non_buyers)
@@ -1007,8 +917,7 @@ final_df$crimes_95 <- as.numeric(final_df$crimes_95)
 final_df$crimes_95.accounts <- as.numeric(final_df$crimes_95.accounts)
 ```
 
-Bei den berechneten Standardabweichung kommt es auch zu NA-Werten, da es Monate mit nur einer Transaktion gibt und daraus eine Null-Divison entsteht.
-Diese fehlenden Werte werden durch 0 ersetzt.
+Bei den berechneten Standardabweichung kommt es auch zu NA-Werten, da es Monate mit nur einer Transaktion gibt und daraus eine Null-Divison entsteht. Diese fehlenden Werte werden durch 0 ersetzt.
 
 ```{r}
 std_cols <- colnames(final_df %>% select(starts_with("std")))
@@ -1021,9 +930,7 @@ Unser finales Dataframe sieht wie folgt aus:
 final_df
 ```
 
-Der Datensatz enthält 1412 Kunden mit 226 verschiedenen Variabeln.
-Die Hälfte der Kunden sind Kreditkartenkäufer.
-Die Zielvariabel für spätere Modelle ist "has_card".
+Der Datensatz enthält 1412 Kunden mit 226 verschiedenen Variabeln. Die Hälfte der Kunden sind Kreditkartenkäufer. Die Zielvariabel für spätere Modelle ist "has_card".
 
 # EDA
 
@@ -1048,16 +955,11 @@ ggplot(final_df, aes(x = issued, fill = factor(has_card))) +
   scale_x_date(limits = range(final_df$issued))
 ```
 
-Dieses Diagramm zeigt die Verteilung der Kaufdaten der Kunden.
-Da das Kaufdatum des Nichtkäufers auf das des Käufers gesetzt wird, sind die Verteilungen der beiden Klassen hier deckungsgleich.
-In den Anfangsjahren des Datensatzes gibt es noch sehr wenige Kreditkartenkäufe, die Tendenz ist jedoch steigend.
-Ab 1996 erleben die Kreditkartenkäufe einen steilen Aufschwung, welcher Mitte 1998 zu seinem Höhepunkt kommt.
-Danach werden wieder weniger Käufe getätigt.
+Dieses Diagramm zeigt die Verteilung der Kaufdaten der Kunden. Da das Kaufdatum des Nichtkäufers auf das des Käufers gesetzt wird, sind die Verteilungen der beiden Klassen hier deckungsgleich. In den Anfangsjahren des Datensatzes gibt es noch sehr wenige Kreditkartenkäufe, die Tendenz ist jedoch steigend. Ab 1996 erleben die Kreditkartenkäufe einen steilen Aufschwung, welcher Mitte 1998 zu seinem Höhepunkt kommt. Danach werden wieder weniger Käufe getätigt.
 
 ## Entwicklung der Vermögen
 
-Als Nächstes wird das Vermögen (balance) der Kunden angeschaut.
-Wir beobachten, ob sich das Vermögen von Kunden und Nichtkunden bezüglich Höhe und Entwicklung unterscheidet.
+Als Nächstes wird das Vermögen (balance) der Kunden angeschaut. Wir beobachten, ob sich das Vermögen von Kunden und Nichtkunden bezüglich Höhe und Entwicklung unterscheidet.
 
 ```{r}
 averages_true <- colMeans(final_df[final_df$has_card == TRUE,
@@ -1082,14 +984,11 @@ ggplot() +
   theme(legend.position = "right")
 ```
 
-Kreditkartenkäufer haben im Schnitt ein höheres Vermögen als Nichtkäufer.
-Das Vermögen aller Kunden steigt tendenziell, wobei das der Käufer steiler als das der Nichtkäufer steigt.
-Ab dem siebten Monat scheint aber auch diese Vermögenssteigerung abzuflachen.
+Kreditkartenkäufer haben im Schnitt ein höheres Vermögen als Nichtkäufer. Das Vermögen aller Kunden steigt tendenziell, wobei das der Käufer steiler als das der Nichtkäufer steigt. Ab dem siebten Monat scheint aber auch diese Vermögenssteigerung abzuflachen.
 
 ## Anzahl Transaktionen
 
-Als Nächstes wollen wir untersuchen, ob sich Kreditkartenkäufer und Nichtkäufer durch die Anzahl getätigter Transaktionen unterscheiden.
-Dafür schauen wir die durchschnittliche Anzahl Transaktionen für beide Klassen an.
+Als Nächstes wollen wir untersuchen, ob sich Kreditkartenkäufer und Nichtkäufer durch die Anzahl getätigter Transaktionen unterscheiden. Dafür schauen wir die durchschnittliche Anzahl Transaktionen für beide Klassen an.
 
 ```{r}
 avg_sum_negative_true <- mean(rowSums(final_df[final_df$has_card == TRUE, grep("count_negative_difference", colnames(final_df))]))
@@ -1106,8 +1005,7 @@ ggplot() +
   labs(x = "", y = "Durchschnittliche Anzahl Transaktionen", title = "Durchschnittliche Anzahl Transaktionen im ganzen Rollup-Fenster")
 ```
 
-Kreditkartenkäufer haben im Schnitt mehr Transaktionen getätigt als Nichtkäufer im Rollup-Fenster.
-Doch wie Verhält es sich, wenn wir Anzahl positive und Anzahl negative Transaktionen separat betrachten?
+Kreditkartenkäufer haben im Schnitt mehr Transaktionen getätigt als Nichtkäufer im Rollup-Fenster. Doch wie Verhält es sich, wenn wir Anzahl positive und Anzahl negative Transaktionen separat betrachten?
 
 ```{r}
 ggplot() +
@@ -1115,8 +1013,7 @@ ggplot() +
   labs(x = "", y = "Durchschnittliche Anzahl Transaktionen", title = "Durchschnittliche Anzahl Transaktionen im ganzen Rollup-Fenster")
 ```
 
-Beide Klassen haben mehr Einnahmen als Ausgaben, wobei Käufer bei positiven sowie bei negativen Käufen durchschnittlich mehr Transaktionen haben.
-Bei den Einnahmen ist der Unterschied der Anzahl Transaktionen etwas höher als bei den Ausgaben.
+Beide Klassen haben mehr Einnahmen als Ausgaben, wobei Käufer bei positiven sowie bei negativen Käufen durchschnittlich mehr Transaktionen haben. Bei den Einnahmen ist der Unterschied der Anzahl Transaktionen etwas höher als bei den Ausgaben.
 
 ## Darlehen
 
@@ -1138,8 +1035,7 @@ Fast doppelt so viele Käufer wie Nichtkäufer haben ein Darlehen aufgenommen.
 
 # Modelle
 
-Als Nächstes wollen wir Modelle trainieren, welche Anhand der Merkmale der Kunden vorhersagen sollen, ob ein Kunde ein Käufer ist oder nicht.
-Dieses Modell soll dann gebraucht werden, um zu erkennen, welche bestehenden Kunden ohne Kreditkarte am ehesten eine kaufen würden.
+Als Nächstes wollen wir Modelle trainieren, welche Anhand der Merkmale der Kunden vorhersagen sollen, ob ein Kunde ein Käufer ist oder nicht. Dieses Modell soll dann gebraucht werden, um zu erkennen, welche bestehenden Kunden ohne Kreditkarte am ehesten eine kaufen würden.
 
 ## Funktionen zur Evaluierung von Modellen
 
@@ -1147,8 +1043,7 @@ Damit die Evaluierung von Modellen nicht redundanten Code enthält, wird hier ve
 
 ### Train-Test-Split
 
-Als Vorbereitung für die Modelle müssen wir unsere Daten zu Trainings- und Testdaten unterteilen.
-Dafür erstellen wir eine Funktion, welche auf verschiedenen Varianten des Datensatz gebraucht werden kann.
+Als Vorbereitung für die Modelle müssen wir unsere Daten zu Trainings- und Testdaten unterteilen. Dafür erstellen wir eine Funktion, welche auf verschiedenen Varianten des Datensatz gebraucht werden kann.
 
 ```{r}
 split_data <- function(df, test_size = 0.2, off_time = TRUE) {
@@ -1198,32 +1093,23 @@ test <- tail(df, n_test_rows)
 
 ### Metriken
 
-Damit wir die verschiedenen Modelle besser evaluieren können, müssen wir die gleichen Kennzahlen und Auswertungen pro Modell machen.
-Zu diesem Zweck definieren wir einige Funktionen, damit wir weniger redundanten Code haben und unsere Ergebnisse in einem einheitlichen, vergleichbaren Format führen können.
+Damit wir die verschiedenen Modelle besser evaluieren können, müssen wir die gleichen Kennzahlen und Auswertungen pro Modell machen. Zu diesem Zweck definieren wir einige Funktionen, damit wir weniger redundanten Code haben und unsere Ergebnisse in einem einheitlichen, vergleichbaren Format führen können.
 
 Dafür erstellen wir eine Funktion, die die Accuracy, Cohen's Kappa, Matthews Korrelation, Precision, Recall und den F1-Score für eine Reihe von Vorhersagen und deren entsprechenden wahren Werte berechnet.
 
 Was bedeuten diese Kennzahlen genau?
 
-Accuracy: Die Accuracy ist der Anteil der Vorhersagen, die mit den tatsächlichen Werten übereinstimmen.
-Sie wird berechnet als Anzahl der korrekten Vorhersagen geteilt durch die Gesamtzahl der Vorhersagen.
+Accuracy: Die Accuracy ist der Anteil der Vorhersagen, die mit den tatsächlichen Werten übereinstimmen. Sie wird berechnet als Anzahl der korrekten Vorhersagen geteilt durch die Gesamtzahl der Vorhersagen.
 
-Cohen's Kappa: Cohen's Kappa ist eine Messgröße für die Qualität von binären Klassifikationen.
-Es wird verwendet, um die Übereinstimmung zwischen zwei Klassifikatoren zu messen, indem es die Übereinstimmung über der erwarteten Übereinstimmung durch Zufall berechnet.
-Ein Kappa-Wert von 1 bedeutet perfekte Übereinstimmung, ein Wert von 0 bedeutet keine Übereinstimmung, die besser ist als Zufall, und ein Wert von -1 bedeutet komplett falsche Klassifikationen.
+Cohen's Kappa: Cohen's Kappa ist eine Messgröße für die Qualität von binären Klassifikationen. Es wird verwendet, um die Übereinstimmung zwischen zwei Klassifikatoren zu messen, indem es die Übereinstimmung über der erwarteten Übereinstimmung durch Zufall berechnet. Ein Kappa-Wert von 1 bedeutet perfekte Übereinstimmung, ein Wert von 0 bedeutet keine Übereinstimmung, die besser ist als Zufall, und ein Wert von -1 bedeutet komplett falsche Klassifikationen.
 
-Matthews correlation coefficient: Der Matthews Korrelation Coefficient (MCC) ist eine Messgröße für die Qualität von binären Klassifikationen.
-Er reicht von -1 bis 1, wobei ein Wert von 1 perfekte Klassifikation bedeutet, ein Wert von 0 eine Klassifikation, die nicht besser als Zufall ist, und ein Wert von -1 eine komplett falsche Klassifikation bedeutet.
+Matthews correlation coefficient: Der Matthews Korrelation Coefficient (MCC) ist eine Messgröße für die Qualität von binären Klassifikationen. Er reicht von -1 bis 1, wobei ein Wert von 1 perfekte Klassifikation bedeutet, ein Wert von 0 eine Klassifikation, die nicht besser als Zufall ist, und ein Wert von -1 eine komplett falsche Klassifikation bedeutet.
 
-Precision: Die Präzision ist der Prozentsatz der Vorhersagen, die tatsächlich korrekt waren, unter der Annahme, dass alle Vorhersagen korrekt sind.
-Sie wird berechnet als Anzahl der korrekten Vorhersagen für die positive Klasse geteilt durch die Gesamtzahl der Vorhersagen für die positive Klasse.
+Precision: Die Präzision ist der Prozentsatz der Vorhersagen, die tatsächlich korrekt waren, unter der Annahme, dass alle Vorhersagen korrekt sind. Sie wird berechnet als Anzahl der korrekten Vorhersagen für die positive Klasse geteilt durch die Gesamtzahl der Vorhersagen für die positive Klasse.
 
-Recall: Der Recall ist der Prozentsatz der tatsächlich positiven Werte, die korrekt vorhergesagt wurden.
-Er wird berechnet als Anzahl der korrekten Vorhersagen für die positive Klasse geteilt durch die Gesamtzahl der tatsächlich positiven Werte.
+Recall: Der Recall ist der Prozentsatz der tatsächlich positiven Werte, die korrekt vorhergesagt wurden. Er wird berechnet als Anzahl der korrekten Vorhersagen für die positive Klasse geteilt durch die Gesamtzahl der tatsächlich positiven Werte.
 
-F1 score: Der F1-Wert ist ein Maß für die Qualität von binären Klassifikationen, das die Harmoniesche Mischung von Präzision und Recall darstellt.
-Es wird berechnet als der Harmoniesche Mittelwert von Präzision und Recall.
-Ein hoher F1-Wert bedeutet, dass sowohl Präzision als auch Recall hoch sind.
+F1 score: Der F1-Wert ist ein Maß für die Qualität von binären Klassifikationen, das die Harmoniesche Mischung von Präzision und Recall darstellt. Es wird berechnet als der Harmoniesche Mittelwert von Präzision und Recall. Ein hoher F1-Wert bedeutet, dass sowohl Präzision als auch Recall hoch sind.
 
 ```{r}
 get_metrics <- function(predictions, true_values, model_name) {
@@ -1264,13 +1150,7 @@ get_metrics <- function(predictions, true_values, model_name) {
 
 Diese Funktion erstellt eine Konfusionsmatrix und gibt sie als Plot zurück.
 
-Eine Konfusionsmatrix ist ein wichtiges Werkzeug zur Evaluation von Klassifikationsmodellen.
-Sie zeigt an, wie gut das Modell in der Lage ist, die verschiedenen Klassen richtig zu identifizieren.
-In einer Konfusionsmatrix werden die tatsächlichen und die von dem Modell vorhergesagten Klassen gegenübergestellt.
-Die Matrix ist in vier Quadranten unterteilt: true positives (TP), true negatives (TN), false positives (FP) und false negatives (FN).
-TP sind die Fälle, in denen das Modell die Klasse richtig vorhergesagt hat, TN sind die Fälle, in denen das Modell die Klasse richtig vorhergesagt hat und diese Klasse auch tatsächlich vorliegt, FP sind die Fälle, in denen das Modell eine Klasse vorhergesagt hat, die in Wirklichkeit nicht vorliegt, und FN sind die Fälle, in denen das Modell eine Klasse nicht vorhergesagt hat, die in Wirklichkeit vorliegt.
-Eine Konfusionsmatrix ist hilfreich, um die Genauigkeit, Sensitivität und Spezifität des Modells zu berechnen und um zu sehen, an welchen Stellen das Modell Schwächen hat.
-Sie kann auch verwendet werden, um die Leistung von verschiedenen Modellen miteinander zu vergleichen.
+Eine Konfusionsmatrix ist ein wichtiges Werkzeug zur Evaluation von Klassifikationsmodellen. Sie zeigt an, wie gut das Modell in der Lage ist, die verschiedenen Klassen richtig zu identifizieren. In einer Konfusionsmatrix werden die tatsächlichen und die von dem Modell vorhergesagten Klassen gegenübergestellt. Die Matrix ist in vier Quadranten unterteilt: true positives (TP), true negatives (TN), false positives (FP) und false negatives (FN). TP sind die Fälle, in denen das Modell die Klasse richtig vorhergesagt hat, TN sind die Fälle, in denen das Modell die Klasse richtig vorhergesagt hat und diese Klasse auch tatsächlich vorliegt, FP sind die Fälle, in denen das Modell eine Klasse vorhergesagt hat, die in Wirklichkeit nicht vorliegt, und FN sind die Fälle, in denen das Modell eine Klasse nicht vorhergesagt hat, die in Wirklichkeit vorliegt. Eine Konfusionsmatrix ist hilfreich, um die Genauigkeit, Sensitivität und Spezifität des Modells zu berechnen und um zu sehen, an welchen Stellen das Modell Schwächen hat. Sie kann auch verwendet werden, um die Leistung von verschiedenen Modellen miteinander zu vergleichen.
 
 ```{r}
 plot_confusion_matrix <- function(predictions, true_values, title = "") {
@@ -1293,21 +1173,11 @@ plot_confusion_matrix <- function(predictions, true_values, title = "") {
 
 Diese Funktion zeichnet die ROC-Kurve und berechnet die Area und Curve.
 
-Die ROC-Kurve (Receiver Operating Characteristic curve) ist ein wichtiges Werkzeug zur Bewertung von Klassifikatoren.
-Sie zeigt die Leistung des Klassifikators bei verschiedenen Schwellenwerten an, die zur Unterscheidung zweier Klassen verwendet werden.
-Die ROC-Kurve ist besonders nützlich, wenn die beiden Klassen im Verhältnis unausgeglichen sind, wie es oft der Fall ist, wenn es darum geht, seltene Ereignisse wie Krankheiten oder Betrug zu erkennen.
+Die ROC-Kurve (Receiver Operating Characteristic curve) ist ein wichtiges Werkzeug zur Bewertung von Klassifikatoren. Sie zeigt die Leistung des Klassifikators bei verschiedenen Schwellenwerten an, die zur Unterscheidung zweier Klassen verwendet werden. Die ROC-Kurve ist besonders nützlich, wenn die beiden Klassen im Verhältnis unausgeglichen sind, wie es oft der Fall ist, wenn es darum geht, seltene Ereignisse wie Krankheiten oder Betrug zu erkennen.
 
-Die ROC-Kurve ist auf der x-Achse der falsch-positiv-Rate (FPR) und auf der y-Achse der wahr-positiv-Rate (TPR) aufgetragen.
-Der FPR gibt an, wie viele falsch positive Ergebnisse es gibt, während der TPR angibt, wie viele wahr positive Ergebnisse erzielt werden.
-Ein perfekter Klassifikator würde eine ROC-Kurve haben, die im oberen linken Bereich beginnt und nach rechts oben verläuft, wobei alle Fälle korrekt klassifiziert werden.
-Ein zufälliger Klassifikator würde eine diagonal verlaufende ROC-Kurve haben, da die FPR und TPR zufällig verteilt sind.
+Die ROC-Kurve ist auf der x-Achse der falsch-positiv-Rate (FPR) und auf der y-Achse der wahr-positiv-Rate (TPR) aufgetragen. Der FPR gibt an, wie viele falsch positive Ergebnisse es gibt, während der TPR angibt, wie viele wahr positive Ergebnisse erzielt werden. Ein perfekter Klassifikator würde eine ROC-Kurve haben, die im oberen linken Bereich beginnt und nach rechts oben verläuft, wobei alle Fälle korrekt klassifiziert werden. Ein zufälliger Klassifikator würde eine diagonal verlaufende ROC-Kurve haben, da die FPR und TPR zufällig verteilt sind.
 
-Die AuC (Area Under the Curve) ist eine Metrik, die aus der ROC-Kurve berechnet wird und die Leistung des Klassifikators zusammenfasst.
-Sie gibt an, wie gut der Klassifikator im Vergleich zu einem zufälligen Klassifikator ist.
-Eine AUC von 1 bedeutet, dass das Modell perfekt in der Lage ist, positive und negative Klassen zu unterscheiden, während eine AUC von 0.5 bedeutet, dass das Modell keine bessere Leistung als Zufall erzielt.
-Die AUC kann Werte zwischen 0 und 1 annehmen.
-Eine AUC von 0 bedeutet, dass das Modell völlig inkorrekt ist.
-Im Allgemeinen gilt, je größer die AUC, desto besser ist das Modell im Vergleich zu anderen Modellen.
+Die AuC (Area Under the Curve) ist eine Metrik, die aus der ROC-Kurve berechnet wird und die Leistung des Klassifikators zusammenfasst. Sie gibt an, wie gut der Klassifikator im Vergleich zu einem zufälligen Klassifikator ist. Eine AUC von 1 bedeutet, dass das Modell perfekt in der Lage ist, positive und negative Klassen zu unterscheiden, während eine AUC von 0.5 bedeutet, dass das Modell keine bessere Leistung als Zufall erzielt. Die AUC kann Werte zwischen 0 und 1 annehmen. Eine AUC von 0 bedeutet, dass das Modell völlig inkorrekt ist. Im Allgemeinen gilt, je größer die AUC, desto besser ist das Modell im Vergleich zu anderen Modellen.
 
 ```{r}
 make_roc_plot_and_get_auc <- function(predictions, true_values)
@@ -1323,18 +1193,9 @@ make_roc_plot_and_get_auc <- function(predictions, true_values)
 ## Vorgehen
 
 Um ein geeignets Modell zu finden, werden wir verschiedene Modell-Alogirthmen auf den Trainingsdaten anzuwenden und versuchen, diese zu optimieren.
-Wir starten dabei mit einem vorgegebenen Baseline Modell.
-Jedes Modell schauen wir kurz individuell an.
-Am Schluss werden die verschiedenen Modelle nochmals gesamthaft miteinander verglichen.
-Dabei schauen wir verschiedene Metriken, Top-N-Listen, Feature-Importance und weitere Informationen wie die ROC-Kurve oder Konfusionsmatrizen.
-Diese Informationen erhalten wir über 10-fache-Kreuzvalidierung.
-Wir trainieren also jedes Modell 10 Mal mit verschiedenen 90% der Trainingsdaten und berechnen unsere Metriken und weiteren Informationen auf den restlichen 10%.
+Wir starten dabei mit einem vorgegebenen Baseline Modell. Jedes Modell schauen wir kurz individuell an. Am Schluss werden die verschiedenen Modelle nochmals gesamthaft miteinander verglichen. Dabei schauen wir verschiedene Metriken, Top-N-Listen, Feature-Importance und weitere Informationen wie die ROC-Kurve oder Konfusionsmatrizen. Diese Informationen erhalten wir über 10-fache-Kreuzvalidierung. Wir trainieren also jedes Modell 10 Mal mit verschiedenen 90% der Trainingsdaten und berechnen unsere Metriken und weiteren Informationen auf den restlichen 10%.
 
-Doch welche Metrik in unserer Liste ist die relevanteste für uns?
-Beim Modell geht es darum, Kunden zu finden, welche am ehesten eine Kreditkarte kaufen würden.
-Diesen Kunden würden dann für die Bank interessant werden und eine gewisse Massnahme würde ergriffen werden, sei es das Schicken einer Werbung oder das Unterbreiten eines Angebots.
-Da dies mit einem zeitlichen Aufwand verbunden ist und Kunden, welche ein solches Angebot oder eine Werbung bekommen aber kein Interesse haben, eher genervt davon werden würden, sollen die vom Modell als positiv klassifizierten Fälle möglichst tatsächlich positiv sein.
-Daher schauen wir bei den Modellen vor allem auf die Precision.
+Doch welche Metrik in unserer Liste ist die relevanteste für uns? Beim Modell geht es darum, Kunden zu finden, welche am ehesten eine Kreditkarte kaufen würden. Diesen Kunden würden dann für die Bank interessant werden und eine gewisse Massnahme würde ergriffen werden, sei es das Schicken einer Werbung oder das Unterbreiten eines Angebots. Da dies mit einem zeitlichen Aufwand verbunden ist und Kunden, welche ein solches Angebot oder eine Werbung bekommen aber kein Interesse haben, eher genervt davon werden würden, sollen die vom Modell als positiv klassifizierten Fälle möglichst tatsächlich positiv sein. Daher schauen wir bei den Modellen vor allem auf die Precision.
 
 ### Baseline Modell
 
@@ -1352,7 +1213,7 @@ baseline_data <- baseline_data[, c("age", "gender", "region", "has_card", "mean_
 baseline_data$has_card <- as.factor(baseline_data$has_card)
 ```
 
-Darauf wird ein Train-Test-Split (random sample) mit 80% Trainingsdaten und 20% Testdaten gebraucht.
+Darauf wird ein Train-Test-Split (Off-Time) mit 80% Trainingsdaten und 20% Testdaten gebraucht.
 
 ```{r}
 splits <- split_data(baseline_data, test_size = 0.2)
@@ -1362,13 +1223,7 @@ train_sets <- splits$train_sets
 val_sets <- splits$val_sets
 ```
 
-Das Regressionsmodell wird auf den Trainingsdaten trainiert.
-Wir verwenden die Funktion glm von der Library "stats".
-Bei jedem Modell müssen die Predictions gemacht und damit die Metriken erstellt werden.
-Da die logistische Regression eine Zahl zwischen 0 und 1 zurückgibt, müssen wir anhand eines Thresholds die Werte in TRUE und FALSE umwandeln.
-Der Threshold gibt an, ab welchem Wert eine Vorhersage als positiv betrachtet wird.
-Standardmäßig ist der Threshold auf 0.5 gesetzt, was bedeutet, dass alle Kunden mit einem Wert grösser als 0.5 als Kartenkäufer betrachtet werden. Die Werte für jede Validierung werden in einer Liste gespeichert.
-Als Erstes wollen wir uns die durchschnittlichen Metriken aller Cross-Validation Sets anschauen.
+Das Regressionsmodell wird auf den Trainingsdaten trainiert. Wir verwenden die Funktion glm von der Library "stats". Bei jedem Modell müssen die Predictions gemacht und damit die Metriken erstellt werden. Da die logistische Regression eine Zahl zwischen 0 und 1 zurückgibt, müssen wir anhand eines Thresholds die Werte in TRUE und FALSE umwandeln. Der Threshold gibt an, ab welchem Wert eine Vorhersage als positiv betrachtet wird. Standardmäßig ist der Threshold auf 0.5 gesetzt, was bedeutet, dass alle Kunden mit einem Wert grösser als 0.5 als Kartenkäufer betrachtet werden. Die Werte für jede Validierung werden in einer Liste gespeichert. Als Erstes wollen wir uns die durchschnittlichen Metriken aller Cross-Validation Sets anschauen.
 
 ```{r}
 regression_baseline_metrics <- list()
@@ -1393,8 +1248,6 @@ regression_baseline_metrics <- do.call("rbind", regression_baseline_metrics)
 metrics_all <- regression_baseline_metrics
 
 colMeans(regression_baseline_metrics %>% select(-model))
-
-#regression_baseline_explainer <- explain(regression_baseline, data = train)
 ```
 
 ```{r}
@@ -1402,18 +1255,13 @@ id_set <- 10
 make_roc_plot_and_get_auc(regression_baseline_predictions[[id_set]], val_sets[[id_set]]$has_card)
 ```
 
-Das Baseline Modell ist mit einer Precision von ca.
-0.78 und einem F1 Score von 0.78 schon einmal nicht schlecht.
-Auch der ROC Plot entfernt sich schon stark von der grauen Linie.
+Das Baseline Modell ist mit einer Precision von ca. 0.78 und einem F1 Score von 0.78 schon einmal nicht schlecht. Auch der ROC Plot entfernt sich schon stark von der grauen Linie.
 
-Aufgrund des No-Free-Lunch Theorem darf man sich nicht mit den Resultaten eines Modells zufrieden geben. 
-Nun sollen weitere Modellvarianten getestet werden, um die Resultate des Baseline-Modells zu verbessern.
+Aufgrund des No-Free-Lunch Theorem darf man sich nicht mit den Resultaten eines Modells zufrieden geben. Nun sollen weitere Modellvarianten getestet werden, um die Resultate des Baseline-Modells zu verbessern.
 
 ### Regressionsmodell mit allen Daten
 
-Als Erstes probieren wir, das gleiche Modell (Logistische Regression) mit mehr Input-Parametern zu trainieren.
-Da die logistische Regression Probleme mit Faktoren hat, welche nur im Trainings- bzw.
-Testdatensatz vorkommen und auch nicht gut mit NA's umgehen kann, müssen wir zuerst noch einige Anpassungen am Datensatz vornehmen.
+Als Erstes probieren wir, das gleiche Modell (Logistische Regression) mit mehr Input-Parametern zu trainieren. Da die logistische Regression Probleme mit Faktoren hat, welche nur im Trainings- bzw. Testdatensatz vorkommen und auch nicht gut mit NA's umgehen kann, müssen wir zuerst noch einige Anpassungen am Datensatz vornehmen.
 
 Als Erstes entfernen wir alle Kolonnen, welche Faktoren sind und mehr als 10 verschiedene Ausprägungen haben.
 
@@ -1474,9 +1322,7 @@ num_na_cols <- sum(na_counts_cols > 0)
 print(paste("Number of columns with NA values:", num_na_cols))
 ```
 
-Es gibt 18 Kunden, welche fehlende Werte haben.
-Da unser Datensatz mit nur etwa 1200 Kunden schon klein ist, wollen wir diese nicht auch noch entfernen.
-Daher imputieren wir die numerischen fehlenden Werte mit dem Median und die fehlenden kategorialen Werte mit dem Wert, welcher am meisten vorkommt.
+Es gibt 18 Kunden, welche fehlende Werte haben. Da unser Datensatz mit nur etwa 1200 Kunden schon klein ist, wollen wir diese nicht auch noch entfernen. Daher imputieren wir die numerischen fehlenden Werte mit dem Median und die fehlenden kategorialen Werte mit dem Wert, welcher am meisten vorkommt.
 
 ```{r}
 # Impute NA numbers with the median
@@ -1539,14 +1385,12 @@ colMeans(regression_all_metrics %>% select(-model))
 make_roc_plot_and_get_auc(regression_all_predictions[[id_set]], val_sets[[id_set]]$has_card)
 ```
 
-Die logistische Regression den neu reduzierten Daten produzierte sehr ähnliche Scores. Precision und Recall konnten sogar leicht erhöht werden.
-Der AUC Score fiel un ein paar Hundertstel gegenüber dem Baseline Modell.
+Die logistische Regression den neu reduzierten Daten produzierte sehr ähnliche Scores. Precision und Recall konnten sogar leicht erhöht werden. Der AUC Score fiel un ein paar Hundertstel gegenüber dem Baseline Modell.
 
 
 ### Decision Tree
 
-Als Nächstes trainieren wir einen Decision Tree.
-Für den Decison Tree verwenden wir das Package "rpart".
+Als Nächstes trainieren wir einen Decision Tree. Für den Decison Tree verwenden wir das Package "rpart".
 
 ```{r}
 decision_tree_metrics <- list()
@@ -1577,26 +1421,15 @@ colMeans(decision_tree_metrics %>% select(-model))
 make_roc_plot_and_get_auc(decision_tree_predictions[[id_set]], val_sets[[id_set]]$has_card)
 ```
 
-Der Decision Tree konnte alle Metriken steigern.
-Nun wollen wir diesen noch ein Wenig verbessern.
+Der Decision Tree konnte alle Metriken steigern. Nun wollen wir diesen noch ein Wenig verbessern.
 
-Decision Trees sind in der Lage, mit einer grossen Anzahl von Merkmalen umzugehen.
-Es kann aber auch von Vorteil sein, nicht alle Merkmale zu benutzen, um Überanpassung zu vermeiden und dadurch die Performance des Modells zu verbessern.
-Dies kann auch die Interpretierbarkeit des Modells erhöhen und die Kosten für das Training und die Auswertung des Modells reduzieren.
-Daher wollen wir als Nächstes untersuchen, ob das Modell besser wird, wenn nicht alle Features verwendet werden.
+Decision Trees sind in der Lage, mit einer grossen Anzahl von Merkmalen umzugehen. Es kann aber auch von Vorteil sein, nicht alle Merkmale zu benutzen, um Überanpassung zu vermeiden und dadurch die Performance des Modells zu verbessern. Dies kann auch die Interpretierbarkeit des Modells erhöhen und die Kosten für das Training und die Auswertung des Modells reduzieren. Daher wollen wir als Nächstes untersuchen, ob das Modell besser wird, wenn nicht alle Features verwendet werden.
 
-Dafür benutzen wir die Funktion RFE vom Paket caret. RFE steht für "Recursive Feature Elimination" (rekursive Merkmalsentfernung) und ist eine Technik, die verwendet wird, um eine Teilmenge der relevantesten Merkmale aus einem gegebenen Datensatz auszuwählen.
-Das Hauptziel von RFE ist es, die Anzahl der Merkmale im Datensatz zu reduzieren, während die Fähigkeit des Modells, präzise vorherzusagen, erhalten bleibt oder sogar verbessert wird.
+Dafür benutzen wir die Funktion RFE vom Paket caret. RFE steht für "Recursive Feature Elimination" (rekursive Merkmalsentfernung) und ist eine Technik, die verwendet wird, um eine Teilmenge der relevantesten Merkmale aus einem gegebenen Datensatz auszuwählen. Das Hauptziel von RFE ist es, die Anzahl der Merkmale im Datensatz zu reduzieren, während die Fähigkeit des Modells, präzise vorherzusagen, erhalten bleibt oder sogar verbessert wird.
 
-Der RFE-Algorithmus funktioniert, indem er Merkmale rekursiv aus dem Datensatz entfernt und bei jedem Schritt ein Modell auf den verbleibenden Merkmalen trainiert.
-Das Merkmal, das die geringste Beitrag zur Modellleistung hat, wird bei jedem Schritt entfernt.
-Der Vorgang wird dann wiederholt, bis eine bestimmte Anzahl von Merkmalen erreicht ist oder bis keine weiteren Verbesserungen der Modellleistung erreicht werden.
+Der RFE-Algorithmus funktioniert, indem er Merkmale rekursiv aus dem Datensatz entfernt und bei jedem Schritt ein Modell auf den verbleibenden Merkmalen trainiert. Das Merkmal, das die geringste Beitrag zur Modellleistung hat, wird bei jedem Schritt entfernt. Der Vorgang wird dann wiederholt, bis eine bestimmte Anzahl von Merkmalen erreicht ist oder bis keine weiteren Verbesserungen der Modellleistung erreicht werden.
 
-Da der RFE bereits mit Cross-Validation arbeitet, benutzen wir hier das gesamte Trainingsset.
-Danach machen wir nochmals unsere eigene Kreuzvalidierung mit dem gefundenen Subset der Input-Parametern.
-Wir suchen die optimalen Parameter für die Anzahlen 1 bis 20.
-Dabei optimiert das Modell auf die Metrik Accuracy, Precision ist leider nicht möglich.
-Die Parameter der besten Anzahl werden wir anschliessend mit unserer eigenen Kreuzvalidierung auswerten und mit dem vorherigen Modell vergleichen
+Da der RFE bereits mit Cross-Validation arbeitet, benutzen wir hier das gesamte Trainingsset. Danach machen wir nochmals unsere eigene Kreuzvalidierung mit dem gefundenen Subset der Input-Parametern. Wir suchen die optimalen Parameter für die Anzahlen 1 bis 20. Dabei optimiert das Modell auf die Metrik Accuracy, Precision ist leider nicht möglich. Die Parameter der besten Anzahl werden wir anschliessend mit unserer eigenen Kreuzvalidierung auswerten und mit dem vorherigen Modell vergleichen
 
 ```{r}
 set.seed(27)
@@ -1651,17 +1484,13 @@ metrics_all <- bind_rows(metrics_all, decision_tree_rfe_metrics)
 colMeans(decision_tree_rfe_metrics %>% select(-model))
 ```
 
-Mit den reduzierten Features konnte der Decision Tree die Precision ein Wenig erhöhen.
-Das ist grossartig, da der Decision Tree jetzt nicht nur simpler, sondern sogar besser ist.
-Es konnte also Datennoise entfernt werden.
+Mit den reduzierten Features konnte der Decision Tree die Precision ein Wenig erhöhen. Das ist grossartig, da der Decision Tree jetzt nicht nur simpler, sondern sogar besser ist. Es konnte also Datennoise entfernt werden.
 
 ### Random Forest
 
-Nun wollen wir eine Erweiterung des Decisions Tree testen: Der Random Forest.
-Random Forest ist ein Ensemble von Decision Trees und kann komplexe Daten besser handhaben und das Überanpassungsproblem reduzieren.
+Nun wollen wir eine Erweiterung des Decisions Tree testen: Der Random Forest. Random Forest ist ein Ensemble von Decision Trees und kann komplexe Daten besser handhaben und das Überanpassungsproblem reduzieren.
 
-Für den Random Forest brauchen wir das Package "randomForest".
-Es verwendet Breiman's random forest algorithmus und kann für Klassifikation und Regression verwendet werden.
+Für den Random Forest brauchen wir das Package "randomForest". Es verwendet Breiman's random forest algorithmus und kann für Klassifikation und Regression verwendet werden.
 
 Beim Random Forest muss unsere Zielvariabel noch in einen Faktor umgewandelt werden, damit ein Wert zwischen 0 und 1 vorhergesagt werden kann.
 
@@ -1692,9 +1521,7 @@ metrics_all <- bind_rows(metrics_all, random_forest_metrics)
 colMeans(random_forest_metrics %>% select(-model))
 ```
 
-Der Random Forest schneidet ein wenig schlechter ab, als der Decision Tree mit den reduzierten Features.
-Wir versuchen auch hier, die Features zu reduzieren.
-Dafür brauchen wir wieder die evaluierten Features von der RFE beim Decision Tree.
+Der Random Forest schneidet ein wenig schlechter ab, als der Decision Tree mit den reduzierten Features. Wir versuchen auch hier, die Features zu reduzieren. Dafür brauchen wir wieder die evaluierten Features von der RFE beim Decision Tree.
 
 ```{r}
 random_forest_rfe_metrics <- list()
@@ -1729,21 +1556,23 @@ make_roc_plot_and_get_auc(decision_tree_rfe_predictions[[id_set]], val_sets[[id_
 
 Wieder konnte das Reduzieren der Features das Modell verbessern, wenn auch nur minim.
 
-Um den Random Forest noch weiter zu verbessern, wollen wir die verschiedenen Hyperparameter optimieren.
-Hyperparameteroptimierung (auch Tuning genannt) ist der Prozess, die beste Set von Hyperparametern für ein maschinelles Lernmodell zu finden.
-Da wir Probleme mit dem GridSearch haben, haben wir folgende Werte für die definierten Parameter getestet und den jeweils Besten anhand der Precision ausgewertet:
+Um den Random Forest noch weiter zu verbessern, wollen wir die verschiedenen Hyperparameter optimieren. Hyperparameteroptimierung (auch Tuning genannt) ist der Prozess, die beste Set von Hyperparametern für ein maschinelles Lernmodell zu finden. Da wir Probleme mit dem GridSearch haben, haben wir folgende Werte für die definierten Parameter getestet und den jeweils Besten anhand der Precision ausgewertet:
 
 mtry : die Anzahl der Variablen, die zufällig als Kandidaten an einer Trennung ausgewählt werden.
-Probierte Werte: 15, 70, 110 Bester Wert: 15
+Probierte Werte: 15, 70, 110 
+Bester Wert: 15
 
 splitrule : die Trennregel, die verwendet wird, um die Qualität einer Trennung zu bewerten.
-Probierte Werte: "gini", "extratrees", "variance" Bester Wert: "extratrees"
+Probierte Werte: "gini", "extratrees", "variance" 
+Bester Wert: "extratrees"
 
 ntree : die Anzahl der Bäume, die im RandomForest gewachsen sind.
-Probierte Werte: 100, 500, 1000 Bester Wert: 500
+Probierte Werte: 100, 500, 1000 
+Bester Wert: 500
 
 max.depth : die maximale Tiefe der Bäume.
-Probierte Werte: 10, 15, 20 Bester Wert: 10
+Probierte Werte: 10, 15, 20 
+Bester Wert: 10
 
 Nun machen wir die gleiche Kreuzvalidierung mit diesen Parametern.
 
@@ -1782,14 +1611,11 @@ colMeans(random_forest_tuned_metrics %>% select(-model))
 make_roc_plot_and_get_auc(random_forest_tuned_predictions[[id_set]], val_sets[[id_set]]$has_card)
 ```
 
-Die Hyperparameteroptimierung konnte das Modell wieder nur minim verbessern.
-Der AUC konnte stärker verbessert werden, als die Metriken. Diese bleiben im selben Rahmen als das unoptimierte Modell.
+Die Hyperparameteroptimierung konnte das Modell wieder nur minim verbessern. Der AUC konnte stärker verbessert werden, als die anderen Metriken. Diese bleiben im selben Rahmen wie das unoptimierte Modell.
 
 ### XGBoost
 
-Eine weitere Erweiterung des Decision Trees ist XGBoost.
-Das XGBoost Modell wird hier mit der Library "xgboost" trainiert.
-Da es Probleme mit nicht-numerischen Variabeln gab, wurden diese für das vorliegende Modell entfernt.
+Eine weitere Erweiterung des Decision Trees ist XGBoost. Das XGBoost Modell wird hier mit der Library "xgboost" trainiert. Da es Probleme mit nicht-numerischen Variabeln gab, wurden diese für das vorliegende Modell entfernt.
 
 ```{r}
 xg_boost_metrics <- list()
@@ -1835,31 +1661,33 @@ colMeans(xg_boost_metrics %>% select(-model))
 make_roc_plot_and_get_auc(xg_boost_predictions[[id_set]], val_sets[[id_set]]$has_card)
 ```
 
-Die Scores sind fast identisch zu denen des Random Forests.
-Wir versuchen hier auch die Hyperparameter zu optimieren.
-Bei der Hypterparameteroptimierung gehen wir wieder gleich vor wie beim Random Forest.
-Wir haben folgende Werte analysiert und ausgewertet:
+Die Scores sind fast identisch zu denen des Random Forests. Wir versuchen hier auch die Hyperparameter zu optimieren. Bei der Hypterparameteroptimierung gehen wir wieder gleich vor wie beim Random Forest. Wir haben folgende Werte analysiert und ausgewertet:
 
 "nrounds" gibt die Anzahl der Iterationen an, die der Algorithmus durchführen soll.
 Je höher die Anzahl, desto länger dauert das Training, aber es besteht auch die Möglichkeit, dass die Genauigkeit des Modells steigt.
 Eine hohe Anzahl Iterationen kann aber auch zu Überanpassung führen.
-Probierte Werte: 1000, 2000, 5000 Bester Wert: 1000
+Probierte Werte: 1000, 2000, 5000 
+Bester Wert: 1000
 
 "eta" gibt den Schrittweiten-Faktor an, mit dem die Gewichtungen des Modells bei jeder Iteration aktualisiert werden.
 Ein kleinerer Wert führt zu kleineren Schritten und damit zu einer größeren Anzahl von Iterationen, um die optimale Lösung zu erreichen.
-Probierte Werte: 0.1, 0.2, 0.3 Bester Wert: 0.1
+Probierte Werte: 0.1, 0.2, 0.3 
+Bester Wert: 0.1
 
 "max_depth" gibt die maximale Tiefe des Baumes an.
 Ein höherer Wert ermöglicht es dem Modell, komplexere Entscheidungen zu treffen, aber es kann auch zu Overfitting führen.
-Probierte Werte: 3, 5, 10 Bester Wert: 3
+Probierte Werte: 3, 5, 10 
+Bester Wert: 3
 
 "gamma" gibt den Mindestverlustreduktionswert an, der erforderlich ist, um einen Knoten weiter zu teilen.
 Ein höherer Wert führt dazu, dass weniger Knoten weiter geteilt werden und damit ein simpler Baum erstellt wird.
-Probierte Werte: 0, 0.1, 0.2, 1 Bester Wert: 0
+Probierte Werte: 0, 0.1, 0.2, 1 
+Bester Wert: 0
 
 "min_child_weight" gibt das Minimum an Gewicht (bezogen auf die Anzahl der Beobachtungen) an, das ein Knoten haben muss, um weiter geteilt zu werden.
 Ein höherer Wert führt dazu, dass weniger Knoten weiter geteilt werden und damit ein simpler Baum erstellt wird.
-Probierte Werte: 1, 3, 5 Bester Wert: 1
+Probierte Werte: 1, 3, 5 
+Bester Wert: 1
 
 ```{r}
 xg_boost_tuned_metrics <- list()
@@ -1910,8 +1738,7 @@ Auch hier konnten die Werte der relevanten Metriken wieder ein wenig verbessert 
 
 # Finden des "besten" Modells
 
-Um nun herauszufinden, welches unserer Modelle das Beste ist, vergleichen wir die Modelle mittels verschiedener Techniken.
-Dabei betrachten wir pro Modellalgorithmus nur jeweils ein Modell: Bei der Logistischen Regression nehemn wir die "Logistic Regression All", beim Decision Tree "Decision Tree (RFE)", beim Random Forest "Random Forest (Tuned)" und beim XGBoost "XGBoost (Tuned)".
+Um nun herauszufinden, welches unserer Modelle das Beste ist, vergleichen wir die Modelle mittels verschiedener Techniken. Dabei betrachten wir pro Modellalgorithmus nur jeweils ein Modell: Bei der Logistischen Regression nehemn wir die "Logistic Regression All", beim Decision Tree "Decision Tree (RFE)", beim Random Forest "Random Forest (Tuned)" und beim XGBoost "XGBoost (Tuned)".
 
 Wir schauen die durchschnittlichen Scores, die Verteilung der Precisions anhand der Kreuzvalidierung, Top-N-Listen, Konfusionsmatrizen, ROC-Kurven und die Feature Importance aller Modelle an und versuchen so, das beste Modell zu evaluieren.
 
@@ -2055,33 +1882,21 @@ make_roc_plot_and_get_auc_list(list(regression_all_predictions[[id_set]], decisi
 
 ```
 
-In dieser Grafik wurden die ROC Kurven der verschiedenen Modelle übereinander geplottet.
-Um dies auf den Trainingsdaten tun zu können, wurde ein zufälliges Train/Val Paket gewählt.
 In dieser Grafik wurden die ROC Kurven der verschiedenen Modelle übereinander geplottet. Um dies auf den Trainingsdaten tun zu können, wurde ein zufälliges Train/Val Paket gewählt.
 
-Die ROC Kurve sollte sich möglichst weit von der grauen Linie entfernen, dies tut sie auch bei allen Modellen recht gut.
-Es ist schwierig visuell zu erkennen, ob nun XGBoost oder Random Forest sich weiter nach oben links entfernt.
-Durch den AUC wird deutlich, dass der Random Forest leicht die Nase vorn hat.
+Die ROC Kurve sollte sich möglichst weit von der grauen Linie entfernen, dies tut sie auch bei allen Modellen recht gut. Es ist schwierig visuell zu erkennen, ob nun XGBoost oder Random Forest sich weiter nach oben links entfernt. Durch den AUC wird deutlich, dass der Random Forest leicht die Nase vorn hat.
 
 ## Feature Importance
 
-Als Nächstes wollen wir die wichtigsten Features für jedes Modell anschauen.
-Das Paket DALEX hat leider auf unseren Modellen nicht richtig funktioniert, weshalb wir die Wichtigkeit der Features bei jedem Modell anders auslesen müssen.
+Als Nächstes wollen wir die wichtigsten Features für jedes Modell anschauen. Das Paket DALEX hat leider auf unseren Modellen nicht richtig funktioniert, weshalb wir die Wichtigkeit der Features bei jedem Modell anders auslesen müssen.
 
-Beim Decision Tree und dem Random Forest wird die Wichtigkeit nach der Metrik "Overall variable Importance" ausgelesen.
-Die Overall variable importance bezieht sich auf den Durchschnitt der Verringerung der Unreinheit (z.B. Gini-Impurities), die durch Aufteilungen anhand einer bestimmten Variable in allen Bäumen im Wald verursacht wird.
-Es ist ein Maß dafür, wie sehr eine Variable zur Genauigkeit des Modells beiträgt.
-Eine Variable mit einem hohen Gesamtwert der Wichtigkeit wird wahrscheinlich ein guter Prädiktor für die Zielvariable sein.
-Mit Hilfe des Wichtigkeitswerts kann man die wichtigsten Merkmale identifizieren, die im Modell verwendet werden.
+Beim Decision Tree und dem Random Forest wird die Wichtigkeit nach der Metrik "Overall variable Importance" ausgelesen. Die Overall variable importance bezieht sich auf den Durchschnitt der Verringerung der Unreinheit (z.B. Gini-Impurities), die durch Aufteilungen anhand einer bestimmten Variable in allen Bäumen im Wald verursacht wird. Es ist ein Maß dafür, wie sehr eine Variable zur Genauigkeit des Modells beiträgt. Eine Variable mit einem hohen Gesamtwert der Wichtigkeit wird wahrscheinlich ein guter Prädiktor für die Zielvariable sein. Mit Hilfe des Wichtigkeitswerts kann man die wichtigsten Merkmale identifizieren, die im Modell verwendet werden.
 
-Für den XGBoost wird die Metrik "Cover" verwendet.
-"Cover" gibt an, wie oft ein Merkmal im Baumaufteilungen verwendet wird.
-Es ist ein Maß dafür, wie häufig ein Merkmal von dem Modell ausgewählt wird, um Entscheidungen zu treffen.
+Für den XGBoost wird die Metrik "Cover" verwendet. "Cover" gibt an, wie oft ein Merkmal im Baumaufteilungen verwendet wird. Es ist ein Maß dafür, wie häufig ein Merkmal von dem Modell ausgewählt wird, um Entscheidungen zu treffen.
 
 In der logistischen Regression werden die wichtigsten Merkmale anhand der absoluten Werte der korrespondierenden Koeffizienten im Modell bestimmt.
 
-Obwohl wir die Werte der Metriken nicht vergleichen können, so können wir die Reihenfolge der Wichtigkeit der Variablen in den verschiedenen Modellen anschauen.
-Dafür wird eine Tabelle erstellt, welche bei allen Modellen die wichtigsten 10 Variablen anzeigt.
+Obwohl wir die Werte der Metriken nicht vergleichen können, so können wir die Reihenfolge der Wichtigkeit der Variablen in den verschiedenen Modellen anschauen. Dafür wird eine Tabelle erstellt, welche bei allen Modellen die wichtigsten 10 Variablen anzeigt.
 
 ```{r}
 imp_df <- data.frame(varImp(random_forest_tuned))
@@ -2112,11 +1927,7 @@ Die wichtigesn Features sind beim Random Forest und dem Decision Tree sehr ähnl
 
 ## Fazit der Modellevaluierung
 
-Das beste Modell bezüglich der errechneten Scores, des ROC/AUC ist der Random Forest.
-In der Top-N Analyse und der Confusion Matrix ist er mit der Beste und annähernd so performant wie XGBoost.
-In Folge wird nun getestet, ob der Random Forest noch weiter reduziert werden könnte, ohne dass er grosse Performance-Verluste hat.
-Anschliessend trainieren wir ihn auf allen Trainingsdaten und analysieren ihn auf den bisher ungesehenen Testdaten.
-Bei den durchschnittlichen Metriken macht XGBoost das Rennen bezüglich Precision, unserer Zielvariabel. Diese ist aber nur minim besser als die Precision des Decision Trees. Dieser hat dafür einen höheren F1-Score. Bei Streuung der verschiedenen Werte ist Decision Tree der Konstanteste. Auch der Median der Precision ist beim Decision Tree nur knapp unter dem XGBoost. Bei den Konfusionsmatrix ist kein Favorit auszumachen. Bei der ROC-Kurve sind der Random Forest und der XGBoost die Gewinner.
+Das beste Modell bezüglich der errechneten Scores, des ROC/AUC ist der Random Forest. In der Top-N Analyse und der Confusion Matrix ist er mit der Beste und annähernd so performant wie XGBoost. In Folge wird nun getestet, ob der Random Forest noch weiter reduziert werden könnte, ohne dass er grosse Performance-Verluste hat. Anschliessend trainieren wir ihn auf allen Trainingsdaten und analysieren ihn auf den bisher ungesehenen Testdaten. Bei den durchschnittlichen Metriken macht XGBoost das Rennen bezüglich Precision, unserer Zielvariabel. Diese ist aber nur minim besser als die Precision des Decision Trees. Dieser hat dafür einen höheren F1-Score. Bei Streuung der verschiedenen Werte ist Decision Tree der Konstanteste. Auch der Median der Precision ist beim Decision Tree nur knapp unter dem XGBoost. Bei den Konfusionsmatrix ist kein Favorit auszumachen. Bei der ROC-Kurve sind der Random Forest und der XGBoost die Gewinner.
 
 Die Favoriten sind also XGBoost und Decision Tree. Da die Interpretierbarkeit des Decision Trees viel höher ist (einerseits dank dem Modellalgorithmus selber, andererseits dank den wenigen verwendeten Features) und er abgesehen von der ROC-Kurve fast identische Werte wie der XGBoost liefert, haben wir uns dafür entschieden, den Decision Tree als unser bestes Modell zu wählen.
 
@@ -2212,7 +2023,6 @@ Wie zu erwarten sind die Metriken ein wenig tiefer als bei der Kreuzvalidierung.
 
 Bis jetzt haben wir alle Modelle mit Off-Time-Daten evaluiert. Zum Schluss möchen wir noch schauen, ob unsere Metriken bei zufälligen Testdaten besser werden würden. Dafür müssen wir einen neuen Train-Test-Split erstellen.
 
-
 ```{r}
 splits <- split_data(final_df_simplified, test_size = 0.2, off_time = FALSE)
 train <- splits$train
@@ -2243,9 +2053,6 @@ Bei unserem Model handelt es sich um ein Product Affinity Model. Es soll vorauss
 
 Es kann Banken helfen, ihre Marketing-Bemühungen besser zu segmentieren, indem es zeigt, wer wahrscheinlich an einer Kreditkarte interessiert ist und wer nicht. Dies kann dazu beitragen, die Conversion-Rate zu verbessern und die Kosten für Marketing-Aktionen zu senken.
 
-Ein weiterer Vorteil, den ein Product Affinity Model bieten kann, ist, dass es Banken helfen kann, ihre Kundenbeziehungen zu verbessern, indem es ihnen ermöglicht, personalisierte Angebote und Services anzubieten. Wenn das Modell vorhersagt, wer wahrscheinlich eine Kreditkarte kaufen wird, können Banken ihren Kunden personalisierte Angebote und Services anbieten, die auf ihre individuellen Bedürfnisse und Vorlieben abgestimmt sind.
-Dies kann dazu beitragen, die Kundenzufriedenheit zu erhöhen und die Kundenbindung zu stärken.
-Dafür müsste das Modell aber noch erweitert werden.
+Ein weiterer Vorteil, den ein Product Affinity Model bieten kann, ist, dass es Banken helfen kann, ihre Kundenbeziehungen zu verbessern, indem es ihnen ermöglicht, personalisierte Angebote und Services anzubieten. Wenn das Modell vorhersagt, wer wahrscheinlich eine Kreditkarte kaufen wird, können Banken ihren Kunden personalisierte Angebote und Services anbieten, die auf ihre individuellen Bedürfnisse und Vorlieben abgestimmt sind. Dies kann dazu beitragen, die Kundenzufriedenheit zu erhöhen und die Kundenbindung zu stärken. Dafür müsste das Modell aber noch erweitert werden.
 
-Ein personalisiertes Angebot könnte beispielsweise eine Kreditkarte sein, die speziell auf die Bedürfnisse und Vorlieben eines Kunden abgestimmt ist, z.B.
-mit einem hohen Rückzahlungsprozentsatz für bestimmte Kategorien von Einkäufen oder mit Reiseversicherungen und anderen Vorteilen, die für den Kunden besonders wichtig sind. Indem Banken ihren Kunden personalisierte Angebote und Services anbieten, können sie ihre Beziehungen zu ihnen stärken und ihre Zufriedenheit erhöhen.
+Ein personalisiertes Angebot könnte beispielsweise eine Kreditkarte sein, die speziell auf die Bedürfnisse und Vorlieben eines Kunden abgestimmt ist, z.B. mit einem hohen Rückzahlungsprozentsatz für bestimmte Kategorien von Einkäufen oder mit Reiseversicherungen und anderen Vorteilen, die für den Kunden besonders wichtig sind. Indem Banken ihren Kunden personalisierte Angebote und Services anbieten, können sie ihre Beziehungen zu ihnen stärken und ihre Zufriedenheit erhöhen.
