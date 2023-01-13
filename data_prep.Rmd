@@ -1618,7 +1618,7 @@ rfe_dt <- rfe(x = train %>% select(-has_card), y = train$has_card,
 
 
 ```{r}
-print(paste("Die optimale Anzahl von Parametern ist: ", len(predictors(rfe_dt))))
+print(paste("Die optimale Anzahl von Parametern ist: ", length(predictors(rfe_dt))))
 print("Die Parameter sind:")
 print(predictors(rfe_dt))
 ```
@@ -1632,7 +1632,7 @@ decision_tree_rfe_predictions_threshold <- list()
 
 for(i in 1:length(val_sets)) {
   
-  decision_tree_rfe <- rpart(has_card ~ ., data = train_sets[[i]] %>% select(predictors(rfe_dt)), method = "class")
+  decision_tree_rfe <- rpart(has_card ~ ., data = train_sets[[i]] %>% select(predictors(rfe_dt), has_card), method = "class")
   
   decision_tree_rfe_predictions[[i]] <- predict(decision_tree_rfe, val_sets[[i]], type = "prob")[, 2]
   
@@ -1708,7 +1708,7 @@ rfe_rf <- rfe(x = train %>% select(-has_card), y = train$has_card,
 ```
 
 ```{r}
-print(paste("Die optimale Anzahl von Parametern ist: ", len(predictors(rfe_rf))))
+print(paste("Die optimale Anzahl von Parametern ist: ", length(predictors(rfe_rf))))
 print("Die Parameter sind:")
 print(predictors(rfe_rf))
 ```
@@ -1722,7 +1722,7 @@ for(i in 1:length(val_sets)) {
   
   train_sets[[i]]$has_card <- as.factor(train_sets[[i]]$has_card)
   
-  random_forest_rfe <- randomForest(has_card ~ ., data = train_sets[[i]] %>% select(predictors(rfe_rf)), method = "class")
+  random_forest_rfe <- randomForest(has_card ~ ., data = train_sets[[i]] %>% select(predictors(rfe_rf), has_card), method = "class")
   
   random_forest_rfe_predictions[[i]] <- predict(random_forest_rfe, val_sets[[i]], type = "prob")[, 2]
   
@@ -1777,7 +1777,7 @@ for(i in 1:length(val_sets)) {
   
   train_sets[[i]]$has_card <- as.factor(train_sets[[i]]$has_card)
   
-  random_forest_tuned <- randomForest(has_card ~ ., data = train_sets[[i]] %>% select(predictors(rfe_rf)), method = "class", control = control)
+  random_forest_tuned <- randomForest(has_card ~ ., data = train_sets[[i]] %>% select(predictors(rfe_rf), has_card), method = "class", control = control)
   
   random_forest_tuned_predictions[[i]] <- predict(random_forest_tuned, val_sets[[i]], type = "prob")[, 2]
   
