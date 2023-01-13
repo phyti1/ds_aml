@@ -1,12 +1,8 @@
 ---
 title: "aml"
 author: "Pascal Berger und Raphael Strebel"
-date: "18. Oktober 2022"
+date: "13. Januar 2022"
 output:
-  html_document:
-    toc: yes
-    toc_depth: '4'
-    df_print: paged
   html_notebook:
     toc: yes
     toc_depth: 4
@@ -17,6 +13,10 @@ output:
     theme: united
     highlight: tango
     code_folding: hide
+  html_document:
+    toc: yes
+    toc_depth: '4'
+    df_print: paged
   pdf_document:
     toc: yes
     toc_depth: '4'
@@ -1872,6 +1872,7 @@ colMeans(xg_boost_tuned_metrics %>% select(-model))
 make_roc_plot_and_get_auc(xg_boost_predictions[[id_set]], val_sets[[id_set]]$has_card)
 ```
 
+Auch hier konnten die Werte der relevanten Metriken wieder ein wenig verbessert werden.
 
 
 # Finden des "besten" Modells
