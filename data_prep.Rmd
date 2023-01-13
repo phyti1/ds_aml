@@ -1318,47 +1318,6 @@ make_roc_plot_and_get_auc <- function(predictions, true_values)
 }
 ```
 
-### Threshold Plot
-
-```{r}
-
-find_best_threshold <- function(predictions, actual_values) {
-  best_threshold <- 0
-  best_f1 <- 0
-  thresholds <- seq(0.01, 0.99, 0.01)
-  f1_scores <- rep(0, length(thresholds))
-
-  for (i in 1:length(thresholds)) {
-    # Set the threshold for the predictions
-    predictions_threshold <- ifelse(predictions > thresholds[i], TRUE, FALSE)
-  
-    if (all(predictions_threshold)) {
-      next
-    } else if (all(!predictions_threshold)) {
-      next
-    }
-    # Calculate the f1
-    f1 <- get_metrics(predictions_threshold, actual_values, "best threshold")$f1
-  
-    f1_scores[i] <- f1
-  
-    # Update the best threshold and best f1 if necessary
-    if (f1 > best_f1) {
-      best_threshold <- thresholds[i]
-      best_f1 <- f1
-    }
-  }
-
-  # Display the best threshold and best recall
-  print(paste("Best threshold:", best_threshold))
-  print(paste("Best F1:", best_f1))
-
-  plot(thresholds, f1_scores, type = "l", xlab = "Threshold", ylab = "F1 Score", main = "F1 Score with different thresholds")
-
-  return(best_threshold)
-}
-```
-
 ## Vorgehen
 
 Um ein geeignets Modell zu finden, werden wir verschiedene Modell-Alogirthmen auf den Trainingsdaten anzuwenden und versuchen, diese zu optimieren.
@@ -1630,21 +1589,13 @@ Dies kann auch die Interpretierbarkeit des Modells erhöhen und die Kosten für 
 
 Daher wollen wir als nächstes untersuchen, ob das Modell besser wird, wenn nicht alle Features verwendet werden.
 
-Dafür benutzen wir die Funktion RFE vom Paket caret.
-RFE steht für "Recursive Feature Elimination" (rekursive Merkmalsentfernung) und ist eine Technik, die verwendet wird, um eine Teilmenge der relevantesten Merkmale aus einem gegebenen Datensatz auszuwählen.
-Das Hauptziel von RFE ist es, die Anzahl der Merkmale im Datensatz zu reduzieren, während die Fähigkeit des Modells, präzise vorherzusagen, erhalten bleibt oder sogar verbessert wird.
+Dafür benutzen wir die Funktion RFE vom Paket caret.RFE steht für "Recursive Feature Elimination" (rekursive Merkmalsentfernung) und ist eine Technik, die verwendet wird, um eine Teilmenge der relevantesten Merkmale aus einem gegebenen Datensatz auszuwählen. Das Hauptziel von RFE ist es, die Anzahl der Merkmale im Datensatz zu reduzieren, während die Fähigkeit des Modells, präzise vorherzusagen, erhalten bleibt oder sogar verbessert wird.
 
-Der RFE-Algorithmus funktioniert, indem er Merkmale rekursiv aus dem Datensatz entfernt und bei jedem Schritt ein Modell auf den verbleibenden Merkmalen trainiert.
-Das Merkmal, das die geringste Beitrag zur Modellleistung hat, wird bei jedem Schritt entfernt.
-Der Vorgang wird dann wiederholt, bis eine bestimmte Anzahl von Merkmalen erreicht ist oder bis keine weiteren Verbesserungen der Modellleistung erreicht werden.
+Der RFE-Algorithmus funktioniert, indem er Merkmale rekursiv aus dem Datensatz entfernt und bei jedem Schritt ein Modell auf den verbleibenden Merkmalen trainiert. Das Merkmal, das die geringste Beitrag zur Modellleistung hat, wird bei jedem Schritt entfernt. Der Vorgang wird dann wiederholt, bis eine bestimmte Anzahl von Merkmalen erreicht ist oder bis keine weiteren Verbesserungen der Modellleistung erreicht werden.
 
-Da der RFE bereits mit Cross-Validation arbeitet, benutzen wir hier das gesamte Trainingsset.
-Danach machen wir nochmals unsere eigene Kreuzvalidierung mit dem gefundenen Subset der Input-Parametern.
-Wir möchten den Datensatz auf 10 Features reduzieren.
-Dabei entfernen wir bei jedem Durchlauf 10 Features.
+Da der RFE bereits mit Cross-Validation arbeitet, benutzen wir hier das gesamte Trainingsset. Danach machen wir nochmals unsere eigene Kreuzvalidierung mit dem gefundenen Subset der Input-Parametern. Wir suchen die optimalen Parameter für die Anzahlen 1 bis 20. Dabei optimiert das Modell auf die Metrik Accuracy, Precision ist leider nicht möglich. Die Parameter der besten Anzahl werden wir anschliessend mit unserer eigenen Kreuzvalidierung auswerten und mit dem vorherigen Modell vergleichen
 
 ```{r}
-if (TRUE) {
 set.seed(27)
 
 # transform has_card to factor and remove status
@@ -1662,68 +1613,46 @@ rfe_dt <- rfe(x = train %>% select(-has_card), y = train$has_card,
              rfeControl = control,
              method = "rpart")
 
-}
-```
-
-```{r}
-print(rfe_dt)
 ```
 
 
+
 ```{r}
-predictors(rfe_dt)
+print(paste("Die optimale Anzahl von Parametern ist: ", len(predictors(rfe_dt))))
+print("Die Parameter sind:")
+print(predictors(rfe_dt))
 ```
 
-
-Um den Decision Tree noch weiter zu verbessern, wollen wir die verschiedenen Hyperparameter optimieren. Hyperparameteroptimierung (auch Tuning genannt) ist der Prozess, die beste Set von Hyperparametern für ein maschinelles Lernmodell zu finden.
-Wir probieren, folgenden Parameter zu optimieren:
-
-cp (complexity parameter): Der cp-Parameter legt fest, wie restriktiv der Baum beim Aufteilen von Knoten ist. Ein kleinerer Wert führt zu einem komplexeren Baum mit mehr Knoten und möglicherweise besserer Anpassungsfähigkeit. Ein größerer Wert führt zu einem einfacheren Baum mit weniger Knoten und möglicherweise besserer Generalisierbarkeit. 
-Mögliche Werte: c(0.001, 0.01, 0.05, 0.1)
-
-maxdepth : Dieser Parameter legt die maximale Tiefe des Baums fest. Ein größerer Wert ermöglicht es dem Baum, tiefer zu wachsen und möglicherweise bessere Anpassungsfähigkeit zu erreichen, während ein kleinerer Wert dazu führen kann, dass der Baum einfacher und generalisierbarer ist. 
-Mögliche Werte: c(5,10,15)
-
-minsize : Dieser Parameter legt die minimale Anzahl von Beobachtungen in einem Knoten fest, die erforderlich ist, damit dieser Knoten weiter aufgeteilt werden kann. Ein größerer Wert führt dazu, dass der Baum einfacher ist und weniger überanpassung erfährt, während ein kleinerer Wert dazu führen kann, dass der Baum komplexer ist und möglicherweise bessere Anpassungsfähigkeit erreicht. 
-Mögliche Werte: c(2,5,10)
-
-In Python würden wir dies normalerweise mit einem GridSearch implementieren. Hier hatten wir aber Probleme damit: Nur ein Paremeter hätte optimiert werden können (cp). Deshalb haben wir die verschiedenen Werte manuell ausprobiert und jeweils den Wert mit der höchsten Precision als bester Parameter genommen.
+Nun machen wir unsere eigene Kreuzvalidierung mit einem Decison Tree mit den evaluierten Parametern.
 
 ```{r}
-decision_tree_tuned_metrics <- list()
-decision_tree_tuned_predictions <- list()
-decision_tree_tuned_predictions_threshold <- list()
-
-control = rpart.control(minsize = 1, cp = 0.01)
+decision_tree_rfe_metrics <- list()
+decision_tree_rfe_predictions <- list()
+decision_tree_rfe_predictions_threshold <- list()
 
 for(i in 1:length(val_sets)) {
-  set.seed(61)
   
-  decision_tree_tuned <- rpart(has_card ~ ., data = train_sets[[i]], method = "class", control = control)
+  decision_tree_rfe <- rpart(has_card ~ ., data = train_sets[[i]] %>% select(predictors(rfe_dt)), method = "class")
   
-  decision_tree_tuned_predictions[[i]] <- predict(decision_tree_tuned, val_sets[[i]], type = "prob")[, 2]
+  decision_tree_rfe_predictions[[i]] <- predict(decision_tree_rfe, val_sets[[i]], type = "prob")[, 2]
   
   threshold <- 0.5
   
-  decision_tree_tuned_predictions_threshold[[i]] <- ifelse(decision_tree_tuned_predictions[[i]] > threshold, TRUE, FALSE)
+  decision_tree_rfe_predictions_threshold[[i]] <- ifelse(decision_tree_rfe_predictions[[i]] > threshold, TRUE, FALSE)
 
-  decision_tree_tuned_metrics[[i]] <- get_metrics(decision_tree_tuned_predictions_threshold[[i]], val_sets[[i]]$has_card, "Decision Tree (Tuned)")
+  decision_tree_rfe_metrics[[i]] <- get_metrics(decision_tree_rfe_predictions_threshold[[i]], val_sets[[i]]$has_card, "Decision Tree (RFE)")
   
 }
 
-decision_tree_tuned_metrics <- do.call("rbind", decision_tree_tuned_metrics)
-metrics_all <- bind_rows(metrics_all, decision_tree_tuned_metrics)
+decision_tree_rfe_metrics <- do.call("rbind", decision_tree_rfe_metrics)
+metrics_all <- bind_rows(metrics_all, decision_tree_rfe_metrics)
 
-colMeans(decision_tree_tuned_metrics %>% select(-model))
+colMeans(decision_tree_rfe_metrics %>% select(-model))
 ```
 
 ```{r}
-make_roc_plot_and_get_auc(decision_tree_tuned_predictions[[id_set]], val_sets[[id_set]]$has_card)
+make_roc_plot_and_get_auc(decision_tree_rfe_predictions[[id_set]], val_sets[[id_set]]$has_card)
 ```
-
-Die Klassifikation ist um einiges besser auf dem Decision Tree.
-Es scheint also für unseren Verwendungszweck der bessere Algorithmus zu sein.
-Wir untersuchen noch Erweiterungen des Decision Trees: den Random Forest und XGBoost
 
 ### Random Forest
 
@@ -1759,44 +1688,96 @@ metrics_all <- bind_rows(metrics_all, random_forest_metrics)
 colMeans(random_forest_metrics %>% select(-model))
 ```
 
-Der Random Forest ist ein wenig besser als der Decision Tree.
-Als nächstes wollen wir probieren, ob eine Hyperparameteroptimierung unser Resultat noch verbessern kann.
-Bei der Hyperparameteroptimierung gehen wir wieder gleich vor, wie beim Decision Tree.
-Wir probieren, folgende Parameter zu optimieren:
-
-mtry : die Anzahl der Variablen, die zufällig als Kandidaten an einer Trennung ausgewählt werden.
-splitrule : die Trennregel, die verwendet wird, um die Qualität einer Trennung zu bewerten.
-"gini" Unreinheit und "extratrees" sind zwei häufig verwendete Trennregeln.
-min.node.size : die minimale Anzahl von Beobachtungen in einem Endknoten.
-max.depth : die maximale Tiefe des Baumes.
-Es ist eine Sequenz von Ganzzahlen von 1 bis 30 mit einem Schritt von 5.
-ntree : die Anzahl der Bäume, die im Zufallswald gewachsen sind.
+Der Random Forest ist ein wenig besser als der Decision Tree. Auch hier versuchen wir wieder mit RFE, das Modell zu reduzieren und somit vielleicht zu verbessern oder zumindest zu vereinfachen.
 
 ```{r}
-param_grid <- expand.grid(mtry = c(0.1, 1, 10, 100), max = c(100))
+set.seed(27)
 
-random_forest_tuned <- train(has_card ~ .,
-                              data = train,
-                              method = "rf",
-                              metric = "Accuracy",
-                              tuneGrid = param_grid,
-                              trControl = trainControl(method = "cv", number = 10))
+train$has_card <- as.factor(train$has_card)
+train$status <- NULL
 
-print(random_forest_tuned$bestTune)
+control <- rfeControl(functions = caretFuncs,
+                      method = "repeatedcv",
+                      repeats = 5)
+
+# Perform RFE
+rfe_rf <- rfe(x = train %>% select(-has_card), y = train$has_card,
+             sizes = c(1:20),
+             rfeControl = control,
+             method = "rf")
 ```
 
-Auch hier nehmen wir wieder das optimierte Modell und untersuchen es mit unserer eigenen Kreuzvalidierung.
+```{r}
+print(paste("Die optimale Anzahl von Parametern ist: ", len(predictors(rfe_rf))))
+print("Die Parameter sind:")
+print(predictors(rfe_rf))
+```
+
+```{r}
+random_forest_rfe_metrics <- list()
+decision_tree_rfe_predictions <- list()
+decision_tree_rfe_predictions_threshold <- list()
+
+for(i in 1:length(val_sets)) {
+  
+  train_sets[[i]]$has_card <- as.factor(train_sets[[i]]$has_card)
+  
+  random_forest_rfe <- randomForest(has_card ~ ., data = train_sets[[i]] %>% select(predictors(rfe_rf)), method = "class")
+  
+  random_forest_rfe_predictions[[i]] <- predict(random_forest_rfe, val_sets[[i]], type = "prob")[, 2]
+  
+  threshold <- 0.5
+  
+  random_forest_rfe_predictions_threshold[[i]] <- ifelse(random_forest_rfe_predictions[[i]] > threshold, TRUE, FALSE)
+
+  random_forest_rfe_metrics[[i]] <- get_metrics(random_forest_rfe_predictions_threshold[[i]], val_sets[[i]]$has_card, "Random Forest (RFE)")
+  
+}
+
+random_forest_rfe_metrics <- do.call("rbind", random_forest_rfe_metrics)
+metrics_all <- bind_rows(metrics_all, random_forest_rfe_metrics)
+
+colMeans(random_forest_rfe_metrics %>% select(-model))
+```
+
+```{r}
+make_roc_plot_and_get_auc(decision_tree_rfe_predictions[[id_set]], val_sets[[id_set]]$has_card)
+```
+
+
+Um den Random Forest noch weiter zu verbessern, wollen wir die verschiedenen Hyperparameter optimieren. Hyperparameteroptimierung (auch Tuning genannt) ist der Prozess, die beste Set von Hyperparametern für ein maschinelles Lernmodell zu finden. Da wir Probleme mit dem GridSearch haben, haben wir folgende Werte für die definierten Parameter probiert und den jeweils besten anhand der Precision ausgewertet.
+
+mtry : die Anzahl der Variablen, die zufällig als Kandidaten an einer Trennung ausgewählt werden.
+Probierte Werte: 15, 70, 110
+Bester Wert: 15
+
+splitrule : die Trennregel, die verwendet wird, um die Qualität einer Trennung zu bewerten.
+Probierte Werte: "gini", "extratrees", "variance"
+Bester Wert: "extratrees"
+
+ntree : die Anzahl der Bäume, die im RandomForest gewachsen sind.
+Probierte Werte: 100, 500, 1000
+Bester Wert: 500
+
+max.depth : die maximale Tiefe der Bäume
+Probierte Werte: 10, 15, 20
+Bester Wert: 10
+
+Nun machen wir die gleiche Kreuzvalidierung mit diesen Parametern.
 
 ```{r}
 random_forest_tuned_metrics <- list()
 random_forest_tuned_predictions <- list()
 random_forest_tuned_predictions_threshold <- list()
 
+
+control = rpart.control(mtry = 15, splitrule = "extratrees", ntrees = 500, maxdepth = 10)
+
 for(i in 1:length(val_sets)) {
   
   train_sets[[i]]$has_card <- as.factor(train_sets[[i]]$has_card)
   
-  random_forest_tuned <- randomForest(has_card ~ ., data = train_sets[[i]], method = "class", mtry = 100, maxnodes = 100, ntree = 50)
+  random_forest_tuned <- randomForest(has_card ~ ., data = train_sets[[i]] %>% select(predictors(rfe_rf)), method = "class", control = control)
   
   random_forest_tuned_predictions[[i]] <- predict(random_forest_tuned, val_sets[[i]], type = "prob")[, 2]
   
@@ -1817,31 +1798,6 @@ colMeans(random_forest_tuned_metrics %>% select(-model))
 
 ```{r}
 make_roc_plot_and_get_auc(random_forest_tuned_predictions[[id_set]], val_sets[[id_set]]$has_card)
-```
-
-```{r}
-if (FALSE) {
-set.seed(27)
-
-# transform has_card to factor and remove status
-train$has_card <- as.factor(train$has_card)
-train$status <- NULL
-
-
-control <- rfeControl(functions = caretFuncs,
-                      method = "repeatedcv",
-                      repeats = 5)
-
-# Perform RFE
-rfe_dt <- rfe(x = train %>% select(-has_card), y = train$has_card,
-             sizes = c(seq(from = 200, to = 10, by = -10)),
-             rfeControl = control,
-             method = "rpart")
-
-# Extract the selected features
-selected_features <- rfe_dt$optVariables
-selected_features
-}
 ```
 
 ### XGBoost
@@ -1894,7 +1850,6 @@ colMeans(xg_boost_metrics %>% select(-model))
 Mit Hyperparameteroptimierung:
 
 ```{r}
-if (FALSE) {
 train_data <- train_sets[[i]]
   test_data <- val_sets[[i]]
   
@@ -1906,10 +1861,10 @@ train_data <- train_sets[[i]]
   test_data <- cbind(as.numeric(val_sets[[i]]$has_card), test_data)
   
   train_preds <- as.matrix(sapply(train_data[,-1], as.numeric))
-  train_labels <- train_data[, 1]
+  train_labels <- as.factor(train_data[, 1])
   
   test_preds <- as.matrix(sapply(test_data[,-1], as.numeric))
-  test_labels <- test_data[, 1]
+  test_labels <- as.factor(test_data[, 1])
   
   param_grid <- expand.grid(nrounds = c(1000, 2000, 5000),
                          eta = c(0.1, 0.2, 0.3),
@@ -1917,12 +1872,9 @@ train_data <- train_sets[[i]]
                          gamma = c(0, 0.1, 0.2, 1),
                          colsample_bytree = c(0.5, 0.8),
                          min_child_weight = c(1, 3, 5),
-                         subsample = c(0.5, 0.8, 1))
+                         subsample = c(1))
 
-  xg_boost_hyperparameter <- train(x = train_preds, y = train_labels, method = "xgbTree", trControl = trainControl(method = "cv", number = 10), tuneGrid = param_grid, metric = "Accuracy", verbose = FALSE, verbosity = 0) 
-
-}
-
+xg_boost_hyperparameter <- train(x = train_preds, y = train_labels, method = "xgbTree", trControl = trainControl(method = "cv", number = 10), tuneGrid = param_grid, metric = "Accuracy", verbose = FALSE, verbosity = 0) 
 ```
 
 ```{r}
@@ -2022,13 +1974,14 @@ plot_confusion_matrix(xg_boost_predictions_threshold[[7]], val_sets[[7]]$has_car
 
 ## ROC Kurven
 
+
 ```{r}
 make_roc_plot_and_get_auc_list <- function(predictions, true_values)
 {
   colors <- c("blue", "red", "black", "green")
   for(i in 1:length(predictions))
   {
-    roc_curve <- roc((as.numeric(true_values) - 1), as.numeric(predictions[[i]]))
+    roc_curve <- roc((as.numeric(true_values)), as.numeric(predictions[[i]]))
     auc_score <- auc(roc_curve)
     if(i == 1)
     {
@@ -2050,10 +2003,45 @@ make_roc_plot_and_get_auc_list(list(regression_baseline_predictions[[7]], decisi
 
 ## Feature Importance
 
+Als nächstes wollen wir die wichtigsten Features für jedes Modell anschauen. Das Paket DALEX hat leider auf unseren Modellen nicht richtig funktioniert, weshalb wir die Wichtigkeit der Features bei jedem Modell anders auslesen müssen. 
+
+Beim Decision Tree und dem Random Forest wird die Wichtigkeit nach der Metrik "Overall variable Importance" ausgelesen. Die Overall variable importance bezieht sich auf den Durchschnitt der Verringerung der Unreinheit (z.B. Gini-Impurities), die durch Aufteilungen anhand einer bestimmten Variable in allen Bäumen im Wald verursacht wird. Es ist ein Maß dafür, wie sehr eine Variable zur Genauigkeit des Modells beiträgt. Eine Variable mit einem hohen Gesamtwert der Wichtigkeit wird wahrscheinlich ein guter Prädiktor für die Zielvariable sein. Mit Hilfe des Wichtigkeitswerts kann man die wichtigsten Merkmale identifizieren, die im Modell verwendet werden.
+
+Für den XGBoost wird die Metrik "Cover" verwendet. "Cover" gibt an, wie oft ein Merkmal im Baumaufteilungen verwendet wird. Es ist ein Maß dafür, wie häufig ein Merkmal von dem Modell ausgewählt wird, um Entscheidungen zu treffen
+
+In der logistischen Regression werden die wichtigsten Merkmale anhand der absoluten Werte der korrespondierenden Koeffizienten im Modell bestimmt. 
+
+Obwohl wir die Werte der Metriken nicht vergleichen können, so können wir die Reihenfolge der Wichtigkeit der Variablen in den verschiedenen Modellen anschauen. Dafür wird eine Tabelle erstellt, welche bei allen Modellen die wichtigsten 10 Variablen anzeigt.
+
+```{r}
+imp_df <- data.frame(varImp(random_forest_tuned))
+imp_df <- imp_df %>% arrange(desc(Overall))
+most_important_random_forest <- rownames(imp_df)
+
+imp_df <- data.frame(varImp(decision_tree))
+imp_df <- imp_df %>% arrange(desc(Overall))
+most_important_decision_tree <- rownames(imp_df)
+
+imp <- xgb.importance(feature_names = colnames(train_preds), model = xg_boost)
+imp_df <- data.frame(imp)
+imp_df <- imp_df %>% arrange(desc(Cover))
+most_important_xgboost <- imp_df$Feature
+
+imp <- coef(regression_all)
+imp_abs <- abs(imp)
+imp_abs <- sort(imp_abs, decreasing = TRUE)
+feature_names <- names(imp_abs)
+most_important_regression <- feature_names
+
+df <- data.frame("Random Forest" = most_important_random_forest[1:10], "Decision Tree" = most_important_decision_tree[1:10], "XGBoost" = most_important_xgboost[1:10], "Logistic Regression" = most_important_regression[1:10])
+
+df
+```
+
+
 ```{r}
 importance_matrix = xgb.importance(colnames(train_preds), model = xg_boost)
 xgb.plot.importance(importance_matrix[1:5,])
-
 ```
 
 # Reduzieren des besten Modelles
@@ -2062,9 +2050,6 @@ Lift Kurve?
 
 # Bestes Modell auf den Testdaten
 
-```{r}
-
-```
 
 ## Mit Off-Time
 
