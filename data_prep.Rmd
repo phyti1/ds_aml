@@ -3,10 +3,6 @@ title: "aml"
 author: "Pascal Berger und Raphael Strebel"
 date: "18. Oktober 2022"
 output:
-  html_document:
-    toc: yes
-    toc_depth: '4'
-    df_print: paged
   html_notebook:
     toc: yes
     toc_depth: 4
@@ -17,6 +13,10 @@ output:
     theme: united
     highlight: tango
     code_folding: hide
+  html_document:
+    toc: yes
+    toc_depth: '4'
+    df_print: paged
   pdf_document:
     toc: yes
     toc_depth: '4'
@@ -661,17 +661,17 @@ Er beinhaltet 3858 Kunden mit 59 verschiedenen Merkmalen.
 
 Nun müssen nur noch die Transaktionsdaten zum Dataframe hinzugefügt werden.
 Diese müssen aber anders zusammengefasst werden, da jeder Kunde viele Transaktionen haben kann.
-Die Transaktionen werden für Kreditkartenkäufer und Nicht-Käufer aggregiert, weshalb wir diese als Erstes anhand der Variable "has_card" trennen.
+Die Transaktionen werden für Kreditkartenkäufer und Nichtkäufer aggregiert, weshalb wir diese als Erstes anhand der Variable "has_card" trennen.
 
 ```{r}
 card_buyers <- full %>% filter(has_card == TRUE)
 non_buyers <- full %>% filter(has_card == FALSE)
 
 print(paste("Anzahl Käufer:", dim(card_buyers)[1]))
-print(paste("Anzahl Nicht-Käufer:", dim(non_buyers)[1]))
+print(paste("Anzahl Nichtkäufer:", dim(non_buyers)[1]))
 ```
 
-Es gibt 706 Kreditkartenkäufer und 3152 Nicht-Käufer.
+Es gibt 706 Kreditkartenkäufer und 3152 Nichtkäufer.
 
 ### Aggregation der Transaktionen für Kreditkartenkäufer
 
@@ -887,20 +887,20 @@ Dieses Dataframe fügen wir noch zu den anderen Informationen der Kreditkartenk�
 summary_df_buyers <- merge(summary_df_wide, subset(card_buyers), by = "account_id")
 ```
 
-### Aggregation der Transaktionen für Nicht-Käufer
+### Aggregation der Transaktionen für Nichtkäufer
 
-Für Nicht-Käufer ist kein Datum des Kreditkartenkaufs gegeben, da sie ja keine gekauft haben.
+Für Nichtkäufer ist kein Datum des Kreditkartenkaufs gegeben, da sie ja keine gekauft haben.
 Es stellt sich also die Frage, von welchem Datum aus man das Rollup-Fenster erstellt.
 
-Wir haben uns dazu entschieden, für jeden Käufer einen möglichst ähnlichen Nicht-Käufer zu finden.
+Wir haben uns dazu entschieden, für jeden Käufer einen möglichst ähnlichen Nichtkäufer zu finden.
 Dafür werden Nichtkäufer mit gleichem Geschlecht und gleicher Region gesucht.
-Das Kaufdatum des ähnlichen Käufers wird dann auf den Nicht-Käufer übertragen.
-Ein weiteres Kriterium ist, dass der Nicht-Käufer mindestens eine Transaktion in dem Rollup-Fenster haben muss.
-Jeder Nicht-Käufer wird maximal einmal als Match genommen, damit keine doppelten Kunden im Datensatz vorkommen.
+Das Kaufdatum des ähnlichen Käufers wird dann auf den Nichtkäufer übertragen.
+Ein weiteres Kriterium ist, dass der Nichtkäufer mindestens eine Transaktion in dem Rollup-Fenster haben muss.
+Jeder Nichtkäufer wird maximal einmal als Match genommen, damit keine doppelten Kunden im Datensatz vorkommen.
 
-Durch dieses Vorgehen benutzen wir nur einen Teil der Nicht-Käufer, haben aber direkte, ähnliche Vergleichspersonen, welche im gleichen Zeitraum keine Kreditkarten gekauft haben.
+Durch dieses Vorgehen benutzen wir nur einen Teil der Nichtkäufer, haben aber direkte, ähnliche Vergleichspersonen, welche im gleichen Zeitraum keine Kreditkarten gekauft haben.
 Ausserdem bringt das Vorgehen auch den Vorteil, dass die Daten für das Modell automatisch Balanced sind.
-Dies macht das Trainieren des Modells einfacher, da es dazu beiträgt, dass das Modell nicht Biased gegenüber den Nicht-Käufern wird.
+Dies macht das Trainieren des Modells einfacher, da es dazu beiträgt, dass das Modell nicht Biased gegenüber den Nichtkäufern wird.
 
 ```{r}
 pb <- txtProgressBar(min = 0, max = nrow(card_buyers), style = 3, width = 50, char = "=")
@@ -951,7 +951,7 @@ print(paste("Anzahl Buyers:", length(unique(card_buyers$account_id))))
 print(paste("Anzahl gefundene Matches:", length(unique(similar_non_buyers$account_id))))
 ```
 
-Wie hier sichtbar wird, konnte zu allen Kartenkäufer ein passender Nicht-Käufer gefunden werden.
+Wie hier sichtbar wird, konnte zu allen Kartenkäufer ein passender Nichtkäufer gefunden werden.
 Auf diesen sollen die Transaktionsdaten jetzt gleich wie bei den Kreditkartenkäufern aggregiert werden.
 Als erstes werden die Transaktionen wieder auf das gegebene Rollup-Fenster gefiltert.
 
@@ -986,7 +986,7 @@ summary_df_wide <- pivot_by_month(summary_df_non_buyers)
 summary_df_non_buyers <- merge(summary_df_wide, similar_non_buyers, by = "account_id")
 ```
 
-Zum Schluss werden die Käufer und die Nicht-Käufer in einem Datensatz kombiniert.
+Zum Schluss werden die Käufer und die Nichtkäufer in einem Datensatz kombiniert.
 Die Account-ID kann noch entfernt werden.
 
 ```{r}
@@ -1025,15 +1025,15 @@ Die Zielvariabel für spätere Modelle ist "has_card".
 
 Nun wollen wir unser Dataframe noch ein wenig genauer unter die Luppe nehmen.
 
-## Anzahl Kreditkarten-Käufer und Nicht-Käufer
+## Anzahl Kreditkartenkäufer und Nichtkäufer
 
 ```{r}
 ggplot(data = final_df, aes(x = has_card)) +
   geom_bar(aes(y = after_stat(count)), stat = "count", fill = "steelblue") +
-  labs(x = "Ist Käufer", y = "Anzahl", title = "Anzahl Kreditkarten-Käufer und Nicht-Käufer")
+  labs(x = "Ist Käufer", y = "Anzahl", title = "Anzahl Kreditkarten-Käufer und Nichtkäufer")
 ```
 
-Da wir für jeden Kreditkartenkäufer genau einen Käufer suchen, ist der Datensatz ausgeglichen: Es hat gleiche viele Nicht-Käufer wie Käufer.
+Da wir für jeden Kreditkartenkäufer genau einen Käufer suchen, ist der Datensatz ausgeglichen: Es hat gleiche viele Nichtkäufer wie Käufer.
 
 ## Verteilung der Kaufdaten
 
@@ -1045,15 +1045,15 @@ ggplot(final_df, aes(x = issued, fill = factor(has_card))) +
 ```
 
 Dieses Diagramm zeigt die Verteilung der Kaufdaten der Kunden.
-Da das Kaufdatum des Nicht-Käufers auf das des Käufers gesetzt wird, sind die Verteilungen der beiden Klassen hier deckungsgleich.
+Da das Kaufdatum des Nichtkäufers auf das des Käufers gesetzt wird, sind die Verteilungen der beiden Klassen hier deckungsgleich.
 In den Anfangsjahren des Datensatzes gibt es noch sehr wenige Kreditkartenkäufe, die Tendenz ist jedoch steigend.
 Ab 1996 erleben die Kreditkartenkäufe einen steilen Aufschwung, welcher Mitte 1998 zu seinem Höhepunkt kommt.
 Danach werden wieder weniger Käufe getätigt.
 
 ## Entwicklung der Vermögen
 
-Als nächstes wollen wir das Vermögen (balance) der Kunden anschauen.
-Wir beobachten, ob sich das Vermögen von Kunden und nicht Kunden bezüglich Höhe und Entwicklung unterscheidet.
+Als Nächstes wird das Vermögen (balance) der Kunden angeschaut.
+Wir beobachten, ob sich das Vermögen von Kunden und Nichtkunden bezüglich Höhe und Entwicklung unterscheidet.
 
 ```{r}
 averages_true <- colMeans(final_df[final_df$has_card == TRUE,
@@ -1070,21 +1070,21 @@ averages_false <- colMeans(final_df[final_df$has_card == FALSE,
 
 ggplot() +
   geom_line(aes(x = 1:12, y = averages_true, color = "Käufer")) +
-  geom_line(aes(x = 1:12, y = averages_false, color = "Nicht-Käufer")) +
+  geom_line(aes(x = 1:12, y = averages_false, color = "Nichtkäufer")) +
   labs(x = "Monat", y = "Durchschnittliches Vermögen", title = "Vermögensentwicklung") +
-  scale_color_manual(name = "Kunden", values = c("Käufer" = "steelblue", "Nicht-Käufer" = "red")) +
+  scale_color_manual(name = "Kunden", values = c("Käufer" = "steelblue", "Nichtkäufer" = "red")) +
   scale_x_continuous(limits = c(1, 12)) +
   scale_y_continuous(limits = c(0, NA)) +
   theme(legend.position = "right")
 ```
 
-Kreditkartenkäufer haben im Schnitt ein höheres Vermögen als Nicht-Käufer.
-Das Vermögen aller Kunden steigt tendenziell, wobei das der Käufer steiler als das der Nicht-Käufer steigt.
+Kreditkartenkäufer haben im Schnitt ein höheres Vermögen als Nichtkäufer.
+Das Vermögen aller Kunden steigt tendenziell, wobei das der Käufer steiler als das der Nichtkäufer steigt.
 Ab dem siebten Monat scheint aber auch diese Vermögenssteigerung abzuflachen.
 
 ## Anzahl Transaktionen
 
-Als nächstes wollen wir untersuchen, ob sich Kreditkartenkäufer und Nicht-Käufer durch die Anzahl getätigter Transaktionen unterscheiden.
+Als Nächstes wollen wir untersuchen, ob sich Kreditkartenkäufer und Nichtkäufer durch die Anzahl getätigter Transaktionen unterscheiden.
 Dafür schauen wir die durchschnittliche Anzahl Transaktionen für beide Klassen an.
 
 ```{r}
@@ -1098,29 +1098,25 @@ avg_sum_both_true = avg_sum_negative_true + avg_sum_positive_true
 avg_sum_both_false = avg_sum_negative_false + avg_sum_positive_false
 
 ggplot() +
-  geom_bar(aes(x = c("Käufer", "Nicht-Käufer"), y = c(avg_sum_both_true, avg_sum_both_false)), stat = "identity", fill = c("steelblue", "red")) +
+  geom_bar(aes(x = c("Käufer", "Nichtkäufer"), y = c(avg_sum_both_true, avg_sum_both_false)), stat = "identity", fill = c("steelblue", "red")) +
   labs(x = "", y = "Durchschnittliche Anzahl Transaktionen", title = "Durchschnittliche Anzahl Transaktionen im ganzen Rollup-Fenster")
 ```
 
-Kreditkartenkäufer haben also im Schnitt mehr Transaktionen getätigt als Nicht-Käufer im Rollup-Fenster.
+Kreditkartenkäufer haben im Schnitt mehr Transaktionen getätigt als Nichtkäufer im Rollup-Fenster.
 Doch wie Verhält es sich, wenn wir Anzahl positive und Anzahl negative Transaktionen separat betrachten?
 
 ```{r}
 ggplot() +
-  geom_bar(aes(x = c("Käufer Ausgaben", "Nicht-Käufer Ausgaben", "Käufer Einnahmen", "Nicht-Käufer Einnahmen"), y = c(avg_sum_negative_true, avg_sum_negative_false, avg_sum_positive_true, avg_sum_positive_false)), stat = "identity", fill = c("steelblue", "red", "steelblue", "red")) +
+  geom_bar(aes(x = c("Käufer Ausgaben", "Nichtkäufer Ausgaben", "Käufer Einnahmen", "Nichtkäufer Einnahmen"), y = c(avg_sum_negative_true, avg_sum_negative_false, avg_sum_positive_true, avg_sum_positive_false)), stat = "identity", fill = c("steelblue", "red", "steelblue", "red")) +
   labs(x = "", y = "Durchschnittliche Anzahl Transaktionen", title = "Durchschnittliche Anzahl Transaktionen im ganzen Rollup-Fenster")
 ```
 
-Beide Klassen haben mehr positive Transaktionen als negative, wobei Käufer bei positiven sowie bei negativen durchschnittlich mehr haben.
-Bei den Einnahmen ist der Unterschied ein wenig höher als bei den Ausgaben.
+Beide Klassen haben mehr Einnahmen als Ausgaben, wobei Käufer bei positiven sowie bei negativen Käufen durchschnittlich mehr Transaktionen haben.
+Bei den Einnahmen ist der Unterschied der Anzahl Transaktionen etwas höher als bei den Ausgaben.
 
 ## Darlehen
 
-Hier soll untersucht werden, ob Käufer mehr Darlehen bei der Bank aufnehmen als Nicht-Käufer.
-
-```{r}
-final_df
-```
+Hier soll untersucht werden, ob Käufer mehr Darlehen bei der Bank aufnehmen als Nichtkäufer.
 
 ```{r}
 card_buyers_with_loan <- final_df[final_df$has_card & final_df$status != "no_loan",]
@@ -1130,15 +1126,15 @@ card_buyers_with_loan_count <- length(card_buyers_with_loan$has_card)
 non_buyers_with_loan_count <- length(non_buyers_with_loan$has_card)
 
 ggplot() +
-  geom_bar(aes(x = c("Käufer", "Nicht-Käufer"), y = c(card_buyers_with_loan_count, non_buyers_with_loan_count)), stat = "identity", fill = c("steelblue", "red")) +
+  geom_bar(aes(x = c("Käufer", "Nichtkäufer"), y = c(card_buyers_with_loan_count, non_buyers_with_loan_count)), stat = "identity", fill = c("steelblue", "red")) +
   labs(x = "", y = "Anzahl", title = "Anzahl Kunden mit Darlehen")
 ```
 
-Fast doppelt so viele Käufer wie Nicht-Käufer haben ein Darlehen aufgenommen.
+Fast doppelt so viele Käufer wie Nichtkäufer haben ein Darlehen aufgenommen.
 
 # Modelle
 
-Als nächstes wollen wir Modelle trainieren, welche Anhand der Merkmale der Kunden vorhersagen sollen, ob ein Kunde ein Käufer ist oder nicht.
+Als Nächstes wollen wir Modelle trainieren, welche Anhand der Merkmale der Kunden vorhersagen sollen, ob ein Kunde ein Käufer ist oder nicht.
 Dieses Modell soll dann gebraucht werden, um zu erkennen, welche bestehenden Kunden ohne Kreditkarte am ehesten eine kaufen würden.
 
 ## Funktionen zur Evaluierung von Modellen
@@ -1202,29 +1198,29 @@ test <- tail(df, n_test_rows)
 ### Metriken
 
 Damit wir die verschiedenen Modelle besser evaluieren können, müssen wir die gleichen Kennzahlen und Auswertungen pro Modell machen.
-Zu diesem Zweck definieren wir einige Funktionen, damit wir weniger redundanten Code haben und unsere Ergebnisse in einem einheitliche, vergleichbaren Format daherkommen.
+Zu diesem Zweck definieren wir einige Funktionen, damit wir weniger redundanten Code haben und unsere Ergebnisse in einem einheitlichen, vergleichbaren Format führen können.
 
-Dafür erstellen wir eine Funktion, die die Genauigkeit (Accuracy), Cohen's Kappa, Matthews Korrelation, Präzision (Precision), Erinnerung (Recall) und den F1-Score für eine Reihe von Vorhersagen und deren entsprechenden wahren Werte berechnet.
+Dafür erstellen wir eine Funktion, die die Accuracy, Cohen's Kappa, Matthews Korrelation, Precision, Recall und den F1-Score für eine Reihe von Vorhersagen und deren entsprechenden wahren Werte berechnet.
 
 Was bedeuten diese Kennzahlen genau?
 
-Accuracy (Genauigkeit): Die Accuracy ist der Prozentsatz der Vorhersagen, die mit den tatsächlichen Werten übereinstimmen.
+Accuracy: Die Accuracy ist der Anteil der Vorhersagen, die mit den tatsächlichen Werten übereinstimmen.
 Sie wird berechnet als Anzahl der korrekten Vorhersagen geteilt durch die Gesamtzahl der Vorhersagen.
 
-Cohen's Kappa (Cohen's Kappa): Cohen's Kappa ist eine Messgröße für die Qualität von binären Klassifikationen.
+Cohen's Kappa: Cohen's Kappa ist eine Messgröße für die Qualität von binären Klassifikationen.
 Es wird verwendet, um die Übereinstimmung zwischen zwei Klassifikatoren zu messen, indem es die Übereinstimmung über der erwarteten Übereinstimmung durch Zufall berechnet.
 Ein Kappa-Wert von 1 bedeutet perfekte Übereinstimmung, ein Wert von 0 bedeutet keine Übereinstimmung, die besser ist als Zufall, und ein Wert von -1 bedeutet komplett falsche Klassifikationen.
 
-Matthews correlation coefficient (Matthews Korrelation): Der Matthews Korrelation Coefficient (MCC) ist eine Messgröße für die Qualität von binären Klassifikationen.
+Matthews correlation coefficient: Der Matthews Korrelation Coefficient (MCC) ist eine Messgröße für die Qualität von binären Klassifikationen.
 Er reicht von -1 bis 1, wobei ein Wert von 1 perfekte Klassifikation bedeutet, ein Wert von 0 eine Klassifikation, die nicht besser als Zufall ist, und ein Wert von -1 eine komplett falsche Klassifikation bedeutet.
 
-Precision (Präzision): Die Präzision ist der Prozentsatz der Vorhersagen, die tatsächlich korrekt waren, unter der Annahme, dass alle Vorhersagen korrekt sind.
+Precision: Die Präzision ist der Prozentsatz der Vorhersagen, die tatsächlich korrekt waren, unter der Annahme, dass alle Vorhersagen korrekt sind.
 Sie wird berechnet als Anzahl der korrekten Vorhersagen für die positive Klasse geteilt durch die Gesamtzahl der Vorhersagen für die positive Klasse.
 
-Recall (Erinnerung): Der Recall ist der Prozentsatz der tatsächlich positiven Werte, die korrekt vorhergesagt wurden.
+Recall: Der Recall ist der Prozentsatz der tatsächlich positiven Werte, die korrekt vorhergesagt wurden.
 Er wird berechnet als Anzahl der korrekten Vorhersagen für die positive Klasse geteilt durch die Gesamtzahl der tatsächlich positiven Werte.
 
-F1 score (F1-Wert): Der F1-Wert ist ein Maß für die Qualität von binären Klassifikationen, das die Harmoniesche Mischung von Präzision und Recall darstellt.
+F1 score: Der F1-Wert ist ein Maß für die Qualität von binären Klassifikationen, das die Harmoniesche Mischung von Präzision und Recall darstellt.
 Es wird berechnet als der Harmoniesche Mittelwert von Präzision und Recall.
 Ein hoher F1-Wert bedeutet, dass sowohl Präzision als auch Recall hoch sind.
 
@@ -1297,7 +1293,7 @@ plot_confusion_matrix <- function(predictions, true_values, title = "") {
 Diese Funktion zeichnet die ROC-Kurve und berechnet die Area und Curve.
 
 Die ROC-Kurve (Receiver Operating Characteristic curve) ist ein wichtiges Werkzeug zur Bewertung von Klassifikatoren.
-Sie zeigt die Leistung des Klassifikators bei verschiedenen Schwellenwerten an, die zur Unterscheidung zwischen zwei Klassen verwendet werden.
+Sie zeigt die Leistung des Klassifikators bei verschiedenen Schwellenwerten an, die zur Unterscheidung zweier Klassen verwendet werden.
 Die ROC-Kurve ist besonders nützlich, wenn die beiden Klassen im Verhältnis unausgeglichen sind, wie es oft der Fall ist, wenn es darum geht, seltene Ereignisse wie Krankheiten oder Betrug zu erkennen.
 
 Die ROC-Kurve ist auf der x-Achse der falsch-positiv-Rate (FPR) und auf der y-Achse der wahr-positiv-Rate (TPR) aufgetragen.
@@ -1341,7 +1337,7 @@ Daher schauen wir bei den Modellen vor allem auf die Precision.
 
 ### Baseline Modell
 
-Als erstes soll eine logistische Regression mit den Informationen Alter, Geschlecht, Domizilregion, Vermögen (balance-Schnitt über alle Monate) und Umsatz (difference-Schnitt über alle Monate) als Baseline Modell erstellt werden.Dafür müssen wir kurz ein neues Dataframe erstellen.
+Als Erstes soll eine logistische Regression mit den Informationen Alter, Geschlecht, Domizilregion, Vermögen (balance-Schnitt über alle Monate) und Umsatz (difference-Schnitt über alle Monate) als Baseline Modell erstellt werden. Dafür müssen wir kurz ein neues Dataframe erstellen.
 
 ```{r}
 baseline_data <- final_df
@@ -1355,7 +1351,7 @@ baseline_data <- baseline_data[, c("age", "gender", "region", "has_card", "mean_
 baseline_data$has_card <- as.factor(baseline_data$has_card)
 ```
 
-Darauf wird ein Train-Test-Split mit 80% Trainingsdaten und 20% Testdaten gebraucht.
+Darauf wird ein Train-Test-Split (random sample) mit 80% Trainingsdaten und 20% Testdaten gebraucht.
 
 ```{r}
 splits <- split_data(baseline_data, test_size = 0.2)
@@ -1368,10 +1364,10 @@ val_sets <- splits$val_sets
 Das Regressionsmodell wird auf den Trainingsdaten trainiert.
 Wir verwenden die Funktion glm von der Library "stats".
 Bei jedem Modell müssen die Predictions gemacht und damit die Metriken erstellt werden.
-Da die logistische Regression eine Zahl zwischen 0 und 1 zurückgibt, müssen wir anhand eines Thresholds die Werte zu TRUE und FALSE umwandeln.
+Da die logistische Regression eine Zahl zwischen 0 und 1 zurückgibt, müssen wir anhand eines Thresholds die Werte in TRUE und FALSE umwandeln.
 Der Threshold gibt an, ab welchem Wert eine Vorhersage als positiv betrachtet wird.
-Standardmäßig ist der Threshold auf 0.5 gesetzt, was bedeutet, dass alle Kunden mit einem Wert grösser als 0.5 als Kartenkäufer betrachtet werden.Die Werte für jede Validierung werden in einer Liste gespeichert.
-Als erstes wollen wir uns die durchschnittlichen Metriken anschauen.
+Standardmäßig ist der Threshold auf 0.5 gesetzt, was bedeutet, dass alle Kunden mit einem Wert grösser als 0.5 als Kartenkäufer betrachtet werden. Die Werte für jede Validierung werden in einer Liste gespeichert.
+Als Erstes wollen wir uns die durchschnittlichen Metriken aller Cross-Validation Sets anschauen.
 
 ```{r}
 regression_baseline_metrics <- list()
@@ -1405,14 +1401,20 @@ id_set <- 10
 make_roc_plot_and_get_auc(regression_baseline_predictions[[id_set]], val_sets[[id_set]]$has_card)
 ```
 
-Das Baseline Modell ist mit einer Precision von ca. 0.78 und einem F1 Score von 0.78 schon einmal nicht schlecht. Nun soll dieses Baseline-Modell verbessert werden.
+Das Baseline Modell ist mit einer Precision von ca.
+0.78 und einem F1 Score von 0.78 schon einmal nicht schlecht.
+Auch der ROC Plot entfernt sich schon stark von der grauen Linie.
+
+Aufgrund des No-Free-Lunch Theorem darf man sich nicht mit den Resultaten eines Modells zufrieden geben. 
+Nun sollen weitere Modellvarianten getestet werden, um die Resultate des Baseline-Modells zu verbessern.
 
 ### Regressionsmodell mit allen Daten
 
-Als erstes probieren wir, das gleiche Modell (Logistische Regression) mit mehr Input-Parametern zu trainieren. Da die logistische Regression Probleme mit Faktoren hat, welche nur im Trainings- bzw.
+Als Erstes probieren wir, das gleiche Modell (Logistische Regression) mit mehr Input-Parametern zu trainieren.
+Da die logistische Regression Probleme mit Faktoren hat, welche nur im Trainings- bzw.
 Testdatensatz vorkommen und auch nicht gut mit NA's umgehen kann, müssen wir zuerst noch einige Anpassungen am Datensatz vornehmen.
 
-Als erstes entfernen wir alle Kolonnen, welche Faktoren sind und mehr als 10 verschiedene Ausprägungen haben.
+Als Erstes entfernen wir alle Kolonnen, welche Faktoren sind und mehr als 10 verschiedene Ausprägungen haben.
 
 ```{r}
 # Ermittle die numerischen Merkmale in den Trainingsdaten
@@ -1471,7 +1473,9 @@ num_na_cols <- sum(na_counts_cols > 0)
 print(paste("Number of columns with NA values:", num_na_cols))
 ```
 
-Es gibt 18 Kunden, welche fehlende Werte haben. Da unser Datensatz mit nur etwa 1200 Kunden schon klein ist, wollen wir diese nicht auch noch entfernen. Daher imputieren wir die numerischen fehlenden Werte mit dem Median und die fehlenden kategorialen Werte mit dem Wert, welcher am meisten vorkommt.
+Es gibt 18 Kunden, welche fehlende Werte haben.
+Da unser Datensatz mit nur etwa 1200 Kunden schon klein ist, wollen wir diese nicht auch noch entfernen.
+Daher imputieren wir die numerischen fehlenden Werte mit dem Median und die fehlenden kategorialen Werte mit dem Wert, welcher am meisten vorkommt.
 
 ```{r}
 # Impute NA numbers with the median
@@ -1483,7 +1487,7 @@ final_df_simplified <- final_df_simplified %>%
   mutate_if(is.character, list(~ if_else(is.na(.), mode(.), .)))
 ```
 
-Wir überprüfen nochmals, ob es keine fehlenden Werte mehr gibt.
+Wir verifizieren nochmals, dass es nun keine fehlenden Werte mehr gibt.
 
 ```{r}
 sum(is.na(final_df_simplified))
@@ -1502,6 +1506,8 @@ test <- splits$test
 train_sets <- splits$train_sets
 val_sets <- splits$val_sets
 ```
+
+Mit dem neuen Datensatz wird in Folge das GLM Modell nochmals trainiert.
 
 ```{r}
 regression_all_metrics <- list()
@@ -1528,17 +1534,18 @@ metrics_all <- bind_rows(metrics_all, regression_all_metrics)
 colMeans(regression_all_metrics %>% select(-model))
 ```
 
-
 ```{r}
 make_roc_plot_and_get_auc(regression_all_predictions[[id_set]], val_sets[[id_set]]$has_card)
 ```
 
-Die logistische Regression mit allen Daten konnte die Scores leider nicht verbessern. Die Precision ist auf einem sehr ähnlichen Wert wie bei unserem Baseline Modell.
+Die logistische Regression den neu reduzierten Daten produzierte sehr ähnliche Scores. Precision und Recall konnten sogar leicht erhöht werden.
+Der AUC Score fiel un ein paar Hundertstel gegenüber dem Baseline Modell.
 
 
 ### Decision Tree
 
-Als erstes machen wir einen Decision Tree. Für den Decison Tree verwenden wir das Package "rpart".
+Als Nächstes trainieren wir einen Decision Tree.
+Für den Decison Tree verwenden wir das Package "rpart".
 
 ```{r}
 decision_tree_metrics <- list()
@@ -1569,15 +1576,26 @@ colMeans(decision_tree_metrics %>% select(-model))
 make_roc_plot_and_get_auc(decision_tree_predictions[[id_set]], val_sets[[id_set]]$has_card)
 ```
 
-Der Decision Tree konnte alle Metriken steigern. Nun wollen wir probieren, diesen noch ein wenig zu verbessern.
+Der Decision Tree konnte alle Metriken steigern.
+Nun wollen wir diesen noch ein Wenig verbessern.
 
-Decision Trees sind in der Lage, mit einer grossen Anzahl von Merkmalen umzugehen. Es kann aber auch von Vorteil sein, nicht alle Merkmale zu benutzen, um Überanpassung zu vermeiden und dadurch die Performance des Modells zu verbessern. Dies kann auch die Interpretierbarkeit des Modells erhöhen und die Kosten für das Training und die Auswertung des Modells reduzieren. Daher wollen wir als nächstes untersuchen, ob das Modell besser wird, wenn nicht alle Features verwendet werden.
+Decision Trees sind in der Lage, mit einer grossen Anzahl von Merkmalen umzugehen.
+Es kann aber auch von Vorteil sein, nicht alle Merkmale zu benutzen, um Überanpassung zu vermeiden und dadurch die Performance des Modells zu verbessern.
+Dies kann auch die Interpretierbarkeit des Modells erhöhen und die Kosten für das Training und die Auswertung des Modells reduzieren.
+Daher wollen wir als Nächstes untersuchen, ob das Modell besser wird, wenn nicht alle Features verwendet werden.
 
-Dafür benutzen wir die Funktion RFE vom Paket caret.RFE steht für "Recursive Feature Elimination" (rekursive Merkmalsentfernung) und ist eine Technik, die verwendet wird, um eine Teilmenge der relevantesten Merkmale aus einem gegebenen Datensatz auszuwählen. Das Hauptziel von RFE ist es, die Anzahl der Merkmale im Datensatz zu reduzieren, während die Fähigkeit des Modells, präzise vorherzusagen, erhalten bleibt oder sogar verbessert wird.
+Dafür benutzen wir die Funktion RFE vom Paket caret. RFE steht für "Recursive Feature Elimination" (rekursive Merkmalsentfernung) und ist eine Technik, die verwendet wird, um eine Teilmenge der relevantesten Merkmale aus einem gegebenen Datensatz auszuwählen.
+Das Hauptziel von RFE ist es, die Anzahl der Merkmale im Datensatz zu reduzieren, während die Fähigkeit des Modells, präzise vorherzusagen, erhalten bleibt oder sogar verbessert wird.
 
-Der RFE-Algorithmus funktioniert, indem er Merkmale rekursiv aus dem Datensatz entfernt und bei jedem Schritt ein Modell auf den verbleibenden Merkmalen trainiert. Das Merkmal, das die geringste Beitrag zur Modellleistung hat, wird bei jedem Schritt entfernt. Der Vorgang wird dann wiederholt, bis eine bestimmte Anzahl von Merkmalen erreicht ist oder bis keine weiteren Verbesserungen der Modellleistung erreicht werden.
+Der RFE-Algorithmus funktioniert, indem er Merkmale rekursiv aus dem Datensatz entfernt und bei jedem Schritt ein Modell auf den verbleibenden Merkmalen trainiert.
+Das Merkmal, das die geringste Beitrag zur Modellleistung hat, wird bei jedem Schritt entfernt.
+Der Vorgang wird dann wiederholt, bis eine bestimmte Anzahl von Merkmalen erreicht ist oder bis keine weiteren Verbesserungen der Modellleistung erreicht werden.
 
-Da der RFE bereits mit Cross-Validation arbeitet, benutzen wir hier das gesamte Trainingsset. Danach machen wir nochmals unsere eigene Kreuzvalidierung mit dem gefundenen Subset der Input-Parametern. Wir suchen die optimalen Parameter für die Anzahlen 1 bis 20. Dabei optimiert das Modell auf die Metrik Accuracy, Precision ist leider nicht möglich. Die Parameter der besten Anzahl werden wir anschliessend mit unserer eigenen Kreuzvalidierung auswerten und mit dem vorherigen Modell vergleichen
+Da der RFE bereits mit Cross-Validation arbeitet, benutzen wir hier das gesamte Trainingsset.
+Danach machen wir nochmals unsere eigene Kreuzvalidierung mit dem gefundenen Subset der Input-Parametern.
+Wir suchen die optimalen Parameter für die Anzahlen 1 bis 20.
+Dabei optimiert das Modell auf die Metrik Accuracy, Precision ist leider nicht möglich.
+Die Parameter der besten Anzahl werden wir anschliessend mit unserer eigenen Kreuzvalidierung auswerten und mit dem vorherigen Modell vergleichen
 
 ```{r}
 set.seed(27)
@@ -1598,8 +1616,6 @@ rfe_dt <- rfe(x = train %>% select(-has_card), y = train$has_card,
              method = "rpart")
 
 ```
-
-
 
 ```{r}
 print(paste("Die beste Anzahl von Parametern ist: ", length(predictors(rfe_dt))))
@@ -1634,13 +1650,17 @@ metrics_all <- bind_rows(metrics_all, decision_tree_rfe_metrics)
 colMeans(decision_tree_rfe_metrics %>% select(-model))
 ```
 
-Mit den reduzierten Features konnte der Decision Tree die Precision ein wenig erhöhen. Das ist grossartig, da der Decision Tree jetzt nicht nur simpler, sondern sogar besser ist.
+Mit den reduzierten Features konnte der Decision Tree die Precision ein Wenig erhöhen.
+Das ist grossartig, da der Decision Tree jetzt nicht nur simpler, sondern sogar besser ist.
+Es konnte also Datennoise entfernt werden.
 
 ### Random Forest
 
-Nun wollen wir eine Erweiterung des Decisions Tree anschauen: Der Random Forest. Random Forest ist ein Ensemble von Decision Trees und kann komplexe Daten besser handhaben und das Überanpassungsproblem reduzieren.
+Nun wollen wir eine Erweiterung des Decisions Tree testen: Der Random Forest.
+Random Forest ist ein Ensemble von Decision Trees und kann komplexe Daten besser handhaben und das Überanpassungsproblem reduzieren.
 
-Für den Random Forest brauchen wir das Package "randomForest". Es verwendet Breiman's random forest algorithmus und kann für Klassifikation und Regression verwendet werden.
+Für den Random Forest brauchen wir das Package "randomForest".
+Es verwendet Breiman's random forest algorithmus und kann für Klassifikation und Regression verwendet werden.
 
 Beim Random Forest muss unsere Zielvariabel noch in einen Faktor umgewandelt werden, damit ein Wert zwischen 0 und 1 vorhergesagt werden kann.
 
@@ -1671,7 +1691,9 @@ metrics_all <- bind_rows(metrics_all, random_forest_metrics)
 colMeans(random_forest_metrics %>% select(-model))
 ```
 
-Der Random Forest schneidet ein wenig schlechter ab, als der Decision Tree mit den reduzierten Features. Wir versuchen auch hier, die Features zu reduzieren. Dafür brauchen wir wieder die evaluierten Features von der RFE beim Decision Tree.
+Der Random Forest schneidet ein wenig schlechter ab, als der Decision Tree mit den reduzierten Features.
+Wir versuchen auch hier, die Features zu reduzieren.
+Dafür brauchen wir wieder die evaluierten Features von der RFE beim Decision Tree.
 
 ```{r}
 random_forest_rfe_metrics <- list()
@@ -1704,25 +1726,23 @@ colMeans(random_forest_rfe_metrics %>% select(-model))
 make_roc_plot_and_get_auc(decision_tree_rfe_predictions[[id_set]], val_sets[[id_set]]$has_card)
 ```
 
-Wieder konnte das reduzieren der Features das Modell verbessern, wenn auch nur minim.
+Wieder konnte das Reduzieren der Features das Modell verbessern, wenn auch nur minim.
 
-Um den Random Forest noch weiter zu verbessern, wollen wir die verschiedenen Hyperparameter optimieren. Hyperparameteroptimierung (auch Tuning genannt) ist der Prozess, die beste Set von Hyperparametern für ein maschinelles Lernmodell zu finden. Da wir Probleme mit dem GridSearch haben, haben wir folgende Werte für die definierten Parameter probiert und den jeweils besten anhand der Precision ausgewertet:
+Um den Random Forest noch weiter zu verbessern, wollen wir die verschiedenen Hyperparameter optimieren.
+Hyperparameteroptimierung (auch Tuning genannt) ist der Prozess, die beste Set von Hyperparametern für ein maschinelles Lernmodell zu finden.
+Da wir Probleme mit dem GridSearch haben, haben wir folgende Werte für die definierten Parameter getestet und den jeweils Besten anhand der Precision ausgewertet:
 
 mtry : die Anzahl der Variablen, die zufällig als Kandidaten an einer Trennung ausgewählt werden.
-Probierte Werte: 15, 70, 110
-Bester Wert: 15
+Probierte Werte: 15, 70, 110 Bester Wert: 15
 
 splitrule : die Trennregel, die verwendet wird, um die Qualität einer Trennung zu bewerten.
-Probierte Werte: "gini", "extratrees", "variance"
-Bester Wert: "extratrees"
+Probierte Werte: "gini", "extratrees", "variance" Bester Wert: "extratrees"
 
 ntree : die Anzahl der Bäume, die im RandomForest gewachsen sind.
-Probierte Werte: 100, 500, 1000
-Bester Wert: 500
+Probierte Werte: 100, 500, 1000 Bester Wert: 500
 
-max.depth : die maximale Tiefe der Bäume
-Probierte Werte: 10, 15, 20
-Bester Wert: 10
+max.depth : die maximale Tiefe der Bäume.
+Probierte Werte: 10, 15, 20 Bester Wert: 10
 
 Nun machen wir die gleiche Kreuzvalidierung mit diesen Parametern.
 
@@ -1762,10 +1782,13 @@ make_roc_plot_and_get_auc(random_forest_tuned_predictions[[id_set]], val_sets[[i
 ```
 
 Die Hyperparameteroptimierung konnte das Modell wieder nur minim verbessern.
+Der AUC konnte stärker verbessert werden, als die Metriken. Diese bleiben im selben Rahmen als das unoptimierte Modell.
 
 ### XGBoost
 
-Eine weitere Erweiterung des Decision Trees ist XGBoost. Das XGBoost Modell wird mit der Library "xgboost" trainiert. Da es Probleme mit nicht-numerischen Variabeln gab, wurden diese für dieses Modell entfernt.
+Eine weitere Erweiterung des Decision Trees ist XGBoost.
+Das XGBoost Modell wird hier mit der Library "xgboost" trainiert.
+Da es Probleme mit nicht-numerischen Variabeln gab, wurden diese für das vorliegende Modell entfernt.
 
 ```{r}
 xg_boost_metrics <- list()
@@ -1811,27 +1834,31 @@ colMeans(xg_boost_metrics %>% select(-model))
 make_roc_plot_and_get_auc(xg_boost_predictions[[id_set]], val_sets[[id_set]]$has_card)
 ```
 
-Die Scores sind fast identisch zu denen des Random Forests. Wir probieren hier auch, die Hyperparameter anzupassen. Bei der Hypterparameteroptimierung gehen wir wieder gleich vor wie beim Random Forest. Wir haben folgende Werte analysiert und ausgewertet:
+Die Scores sind fast identisch zu denen des Random Forests.
+Wir versuchen hier auch die Hyperparameter zu optimieren.
+Bei der Hypterparameteroptimierung gehen wir wieder gleich vor wie beim Random Forest.
+Wir haben folgende Werte analysiert und ausgewertet:
 
-"nrounds" gibt die Anzahl der Iterationen an, die der Algorithmus durchführen soll. Je höher die Anzahl, desto länger dauert das Training, aber es besteht auch die Möglichkeit, dass die Genauigkeit des Modells steigt. Eine hohe Anzahl Iterationen kann aber auch zu Überanpassung führen
-Probierte Werte: 1000, 2000, 5000
-Bester Wert: 1000
+"nrounds" gibt die Anzahl der Iterationen an, die der Algorithmus durchführen soll.
+Je höher die Anzahl, desto länger dauert das Training, aber es besteht auch die Möglichkeit, dass die Genauigkeit des Modells steigt.
+Eine hohe Anzahl Iterationen kann aber auch zu Überanpassung führen.
+Probierte Werte: 1000, 2000, 5000 Bester Wert: 1000
 
-"eta" gibt den Schrittweiten-Faktor an, mit dem die Gewichtungen des Modells bei jeder Iteration aktualisiert werden. Ein kleinerer Wert führt zu kleineren Schritten und damit zu einer größeren Anzahl von Iterationen, um die optimale Lösung zu erreichen.
-Probierte Werte: 0.1, 0.2, 0.3
-Bester Wert: 0.1
+"eta" gibt den Schrittweiten-Faktor an, mit dem die Gewichtungen des Modells bei jeder Iteration aktualisiert werden.
+Ein kleinerer Wert führt zu kleineren Schritten und damit zu einer größeren Anzahl von Iterationen, um die optimale Lösung zu erreichen.
+Probierte Werte: 0.1, 0.2, 0.3 Bester Wert: 0.1
 
-"max_depth" gibt die maximale Tiefe des Baumes an. Ein höherer Wert ermöglicht es dem Modell, komplexere Entscheidungen zu treffen, aber es kann auch zu Overfitting führen.
-Probierte Werte: 3, 5, 10
-Bester Wert: 3
+"max_depth" gibt die maximale Tiefe des Baumes an.
+Ein höherer Wert ermöglicht es dem Modell, komplexere Entscheidungen zu treffen, aber es kann auch zu Overfitting führen.
+Probierte Werte: 3, 5, 10 Bester Wert: 3
 
-"gamma" gibt den Mindestverlustreduktionswert an, der erforderlich ist, um einen Knoten weiter zu teilen. Ein höherer Wert führt dazu, dass weniger Knoten weiter geteilt werden und damit ein simpler Baum erstellt wird.
-Probierte Werte: 0, 0.1, 0.2, 1
-Bester Wert: 0
+"gamma" gibt den Mindestverlustreduktionswert an, der erforderlich ist, um einen Knoten weiter zu teilen.
+Ein höherer Wert führt dazu, dass weniger Knoten weiter geteilt werden und damit ein simpler Baum erstellt wird.
+Probierte Werte: 0, 0.1, 0.2, 1 Bester Wert: 0
 
-"min_child_weight" gibt das Minimum an Gewicht (bezogen auf die Anzahl der Beobachtungen) an, das ein Knoten haben muss, um weiter geteilt zu werden. Ein höherer Wert führt dazu, dass weniger Knoten weiter geteilt werden und damit ein simpler Baum erstellt wird.
-Probierte Werte: 1, 3, 5
-Bester Wert: 1
+"min_child_weight" gibt das Minimum an Gewicht (bezogen auf die Anzahl der Beobachtungen) an, das ein Knoten haben muss, um weiter geteilt zu werden.
+Ein höherer Wert führt dazu, dass weniger Knoten weiter geteilt werden und damit ein simpler Baum erstellt wird.
+Probierte Werte: 1, 3, 5 Bester Wert: 1
 
 ```{r}
 xg_boost_tuned_metrics <- list()
@@ -1874,23 +1901,22 @@ colMeans(xg_boost_tuned_metrics %>% select(-model))
 ```
 
 ```{r}
-make_roc_plot_and_get_auc(xg_boost_predictions[[id_set]], val_sets[[id_set]]$has_card)
+make_roc_plot_and_get_auc(xg_boost_tuned_predictions[[id_set]], val_sets[[id_set]]$has_card)
 ```
 
+Auch diese Auswertung zeigt, die Hyperparameteroptimierung hat kaum Verbesserungen gegenüber dem unoptimierten Modell gezeigt. 
 
 
 # Finden des "besten" Modells
 
-Um nun herauszufinden, welches unserer Modelle das beste ist, vergleichen wir die Modelle auf verschiedene Arten und Weisen.
-Dabei betrachten wir pro Modellalgorithmus nur jeweils ein Modell: 
-Bei der Logistischen Regression nehemn wir die "Logistic Regression All", beim Decision Tree "Decision Tree (RFE)", beim Random Forest "Random Forest (Tuned)" und beim XGBoost "XGBoost (Tuned)"
+Um nun herauszufinden, welches unserer Modelle das Beste ist, vergleichen wir die Modelle mittels verschiedener Techniken.
+Dabei betrachten wir pro Modellalgorithmus nur jeweils ein Modell: Bei der Logistischen Regression nehemn wir die "Logistic Regression All", beim Decision Tree "Decision Tree (RFE)", beim Random Forest "Random Forest (Tuned)" und beim XGBoost "XGBoost (Tuned)".
 
 Wir schauen die durchschnittlichen Scores, die Verteilung der Precisions anhand der Kreuzvalidierung, Top-N-Listen, Konfusionsmatrizen, ROC-Kurven und die Feature Importance aller Modelle an und versuchen so, das beste Modell zu evaluieren.
 
 ```{r}
 metrics_all
 ```
-
 
 ```{r}
 chosen_models <- c("Logistic Regression All", "Decision Tree (RFE)", "Random Forest (Tuned)", "XGBoost (Tuned)")
@@ -1903,9 +1929,10 @@ metrics_all <- metrics_all %>% filter(model %in% chosen_models)
 metrics_all %>% group_by(model) %>% summarize_if(is.numeric, mean) %>% arrange(desc(precision))
 ```
 
-In dieser Darstellung sind die durchschnittlichen Scores über die Cross Validation pro Modell aufgezeigt.
-Das beste Modell bezüglich Train CV-Score ist der Random Forest. Er ist jedoch bei allen Kennzahlen fast deckungsgleich wie der XGBoost. 
-Dies macht Sinn, da XGBoost eine Erweiterung des Random Forests ist. 
+In dieser Darstellung sind die durchschnittlichen Scores über die Cross-Validation pro Modell aufgezeigt.
+Das beste Modell bezüglich Train CV-Score ist der Random Forest.
+Er ist jedoch bei allen Kennzahlen fast deckungsgleich wie der XGBoost.
+Dies macht Sinn, da XGBoost eine Erweiterung des Random Forests ist.
 
 ## Verteilungen der Precision
 
@@ -1918,15 +1945,15 @@ ggplot(data = metrics_all, aes(x = model, y = precision)) +
 In dieser Darstellung werden die Verteilungen der CV-Scores pro Modell aufgezeigt.
 Ein gut optimiertes Modell sollte auf den Cross-Validation Sets möglichst ähnliche Scores aufweisen.
 Damit kann aufgezeigt werden, dass das Modell auf die verschiedenen Testdaten nicht overfittet.
-Wie wir hier sehen sind die Variationen der Precision eher klein. Die ähnlichsten Precision Resultate hat der Decision Tree.
-
+Wie wir hier sehen sind die Variationen der Precision eher klein.
+Die ähnlichsten Precision Resultate hat der Decision Tree.
 
 ## Vergleich der Top-N-Listen
 
 Hier vergleichen wir die Top-N-Listen der Modelle.
 Für jedes Modell wird eine Top-20 Liste der Kunden vom ersten und letzten Validierungsset der Kreuzvalidierung mit den höchsten Werten bei der Prediction gemacht.
 All diese Kunden müssten demnach Käufer sein.
-In den beiden Tabellen stellen wir dar, ob die Modelle auf den jeweiligen Positionen recht behalten haben oder nicht.
+In der nachfolgenden Tabelle stellen wir dar, wie viele Male das jeweilige Modell auf der jeweiligen Position recht behalten hat oder nicht.
 
 ```{r}
 
@@ -1968,10 +1995,12 @@ for(i in 1:10)
 df
 ```
 
-In dieser Darstellungen sind die Anzahl Fehlklassifikationen auf alle 10 Cross Validation Datensätze aufsummiert. Das perfekte Modell hätte auf allen Werten eine 0, also auf allen Top-N Vorhersagen keine Fehler gemacht.
+In dieser Darstellungen sind die Anzahl Fehlklassifikationen auf alle 10 Cross-Validation Datensätze aufsummiert.
+Das perfekte Modell hätte auf allen Werten eine 0, also auf allen Top-N Vorhersagen keine Fehler gemacht.
 
-Betrachten wir nur die Falschklassifikationen der Top-3 Vorhersagen, sehen wir, dass "Random Forest" und "XGBoost" am besten abschneiden. Der "Decision Tree" und die "logistische Regression" haben auf die Top-3 Vorhersagen drei oder mehr falsche Vorhersagen gemacht, die Forest Modelle nur null bis einen. XGBoost schneidet hier am besten ab.
-
+Betrachten wir nur die Falschklassifikationen der Top-3 Vorhersagen, sehen wir, dass "Random Forest" und "XGBoost" am besten abschneiden.
+Der "Decision Tree" und die "logistische Regression" haben auf die Top-3 Vorhersagen drei oder mehr falsche Vorhersagen gemacht, die Forest Modelle nur null bis einen.
+XGBoost schneidet hier insgesamt am Besten ab.
 
 ## Konfusionsmatrizen
 
@@ -1986,12 +2015,10 @@ plot_confusion_matrix(random_forest_tuned_predictions_threshold[[id_set]], val_s
 plot_confusion_matrix(xg_boost_tuned_predictions_threshold[[id_set]], val_sets[[id_set]]$has_card, "XGBoost")
 ```
 
-Die Confusion Matritzen der Modelle sehen sich sehr grundsätzlich ähnlich. 
+Die Confusion Matritzen der Modelle sehen sich sehr grundsätzlich ähnlich.
 Einzig bei der logistischen Regression sind die false-positive Werte höher als bei den übrigen Modellen.
 
-
 ## ROC Kurven
-
 
 ```{r}
 get_mean <- function(cv_results)
@@ -2035,24 +2062,31 @@ make_roc_plot_and_get_auc_list(list(regression_all_predictions[[id_set]], decisi
 ```
 
 In dieser Grafik wurden die ROC Kurven der verschiedenen Modelle übereinander geplottet.
-Um dies auf den Trainingsdaten tun zu können, wurde ein zufälliges Train/Val Packet gewählt.
+Um dies auf den Trainingsdaten tun zu können, wurde ein zufälliges Train/Val Paket gewählt.
 
 Die ROC Kurve sollte sich möglichst weit von der grauen Linie entfernen, dies tut sie auch bei allen Modellen recht gut.
 Es ist schwierig visuell zu erkennen, ob nun XGBoost oder Random Forest sich weiter nach oben links entfernt.
-Durch den AUC wird deutlich, dass der Random Forest leicht die Nase vorn hat.
-
+Durch den AUC wird deutlich, dass der Random Forest hier leicht die Nase vorn hat.
 
 ## Feature Importance
 
-Als nächstes wollen wir die wichtigsten Features für jedes Modell anschauen. Das Paket DALEX hat leider auf unseren Modellen nicht richtig funktioniert, weshalb wir die Wichtigkeit der Features bei jedem Modell anders auslesen müssen. 
+Als Nächstes wollen wir die wichtigsten Features für jedes Modell anschauen.
+Das Paket DALEX hat leider auf unseren Modellen nicht richtig funktioniert, weshalb wir die Wichtigkeit der Features bei jedem Modell anders auslesen müssen.
 
-Beim Decision Tree und dem Random Forest wird die Wichtigkeit nach der Metrik "Overall variable Importance" ausgelesen. Die Overall variable importance bezieht sich auf den Durchschnitt der Verringerung der Unreinheit (z.B. Gini-Impurities), die durch Aufteilungen anhand einer bestimmten Variable in allen Bäumen im Wald verursacht wird. Es ist ein Maß dafür, wie sehr eine Variable zur Genauigkeit des Modells beiträgt. Eine Variable mit einem hohen Gesamtwert der Wichtigkeit wird wahrscheinlich ein guter Prädiktor für die Zielvariable sein. Mit Hilfe des Wichtigkeitswerts kann man die wichtigsten Merkmale identifizieren, die im Modell verwendet werden.
+Beim Decision Tree und dem Random Forest wird die Wichtigkeit nach der Metrik "Overall variable Importance" ausgelesen.
+Die Overall variable importance bezieht sich auf den Durchschnitt der Verringerung der Unreinheit (z.B. Gini-Impurities), die durch Aufteilungen anhand einer bestimmten Variable in allen Bäumen im Wald verursacht wird.
+Es ist ein Maß dafür, wie sehr eine Variable zur Genauigkeit des Modells beiträgt.
+Eine Variable mit einem hohen Gesamtwert der Wichtigkeit wird wahrscheinlich ein guter Prädiktor für die Zielvariable sein.
+Mit Hilfe des Wichtigkeitswerts kann man die wichtigsten Merkmale identifizieren, die im Modell verwendet werden.
 
-Für den XGBoost wird die Metrik "Cover" verwendet. "Cover" gibt an, wie oft ein Merkmal im Baumaufteilungen verwendet wird. Es ist ein Maß dafür, wie häufig ein Merkmal von dem Modell ausgewählt wird, um Entscheidungen zu treffen
+Für den XGBoost wird die Metrik "Cover" verwendet.
+"Cover" gibt an, wie oft ein Merkmal im Baumaufteilungen verwendet wird.
+Es ist ein Maß dafür, wie häufig ein Merkmal von dem Modell ausgewählt wird, um Entscheidungen zu treffen.
 
-In der logistischen Regression werden die wichtigsten Merkmale anhand der absoluten Werte der korrespondierenden Koeffizienten im Modell bestimmt. 
+In der logistischen Regression werden die wichtigsten Merkmale anhand der absoluten Werte der korrespondierenden Koeffizienten im Modell bestimmt.
 
-Obwohl wir die Werte der Metriken nicht vergleichen können, so können wir die Reihenfolge der Wichtigkeit der Variablen in den verschiedenen Modellen anschauen. Dafür wird eine Tabelle erstellt, welche bei allen Modellen die wichtigsten 10 Variablen anzeigt.
+Obwohl wir die Werte der Metriken nicht vergleichen können, so können wir die Reihenfolge der Wichtigkeit der Variablen in den verschiedenen Modellen anschauen.
+Dafür wird eine Tabelle erstellt, welche bei allen Modellen die wichtigsten 10 Variablen anzeigt.
 
 ```{r}
 imp_df <- data.frame(varImp(random_forest_tuned))
@@ -2079,19 +2113,18 @@ df <- data.frame("Random Forest" = most_important_random_forest[1:10], "Decision
 df
 ```
 
-
 ## Fazit der Modellevaluierung
 
 Das beste Modell bezüglich der errechneten Scores, des ROC/AUC ist der Random Forest.
 In der Top-N Analyse und der Confusion Matrix ist er mit der Beste und annähernd so performant wie XGBoost.
-In Folge wird nun versucht, ob der Random Forest noch weiter reduziert werden könnte, ohne dass er grosse Performance-Verluste hat. Anschliessend trainieren wir ihn auf allen Trainingsdaten und analysieren ihn auf den Testdaten.
+In Folge wird nun getestet, ob der Random Forest noch weiter reduziert werden könnte, ohne dass er grosse Performance-Verluste hat.
+Anschliessend trainieren wir ihn auf allen Trainingsdaten und analysieren ihn auf den bisher ungesehenen Testdaten.
 
 ## Reduzieren des besten Modelles
 
 ```{r}
 length(most_important_random_forest)
 ```
-
 
 ```{r}
 precisions <- c()
@@ -2145,6 +2178,7 @@ plot(1:length(precisions), precisions, type = "l", xlab = "Anzahl Variabeln", yl
 
 ## Mit Off-Time Split
 
+Für die erste Analyse trennen wir train/test zeitlich. Damit sind die makroökonomischen 
 
 ```{r}
 #refit
@@ -2167,8 +2201,9 @@ Die Accuracy bleibt jedoch noch über 0.8.
 
 ## Mit Random Split
 
-Bis jetzt haben wir alle Modelle mit Off-Time-Daten evaluiert. Zum Schluss möchen wir noch schauen, ob unsere Metriken bei zufälligen Testdaten besser werden würden. Dafür müssen wir einen neuen Train-Test-Split erstellen.
-
+Bis jetzt haben wir alle Modelle mit Off-Time-Daten evaluiert.
+Zum Schluss möchen wir noch schauen, ob unsere Metriken bei zufälligen Testdaten besser werden würden.
+Dafür müssen wir einen neuen Train-Test-Split erstellen.
 
 ```{r}
 splits <- split_data(final_df_simplified, test_size = 0.2, off_time = FALSE)
@@ -2191,11 +2226,6 @@ random_forest_refit_predictions_threshold <- ifelse(random_forest_refit_predicti
 random_forest_refit_metrics <- get_metrics(random_forest_refit_predictions_threshold, test$has_card, "Random Forest Refit Random")
 random_forest_refit_metrics
 ```
-
-
-
-
-
 
 # Fazit
 
