@@ -1161,7 +1161,7 @@ split_data <- function(df, test_size = 0.2, off_time = TRUE) {
   n_rows <- nrow(df)
 
 # Calculate the number of rows in the test set (20% of the total number of rows)
-n_test_rows <- floor(n_rows * 0.2)
+n_test_rows <- floor(n_rows * test_size)
 
 df$issued <- NULL
 
@@ -1176,12 +1176,9 @@ test <- tail(df, n_test_rows)
   
 
 
-
-# create cv folds
   train_sets <- c()
   val_sets <- c()
 
-  set.seed(27)
   cv_folds <- vfold_cv(train, v = 10)
   # Iteriere über alle Folds
   for (i in 1:nrow(cv_folds)) 
@@ -1599,8 +1596,6 @@ rfe_dt <- rfe(x = train %>% select(-has_card), y = train$has_card,
 
 ```
 
-
-
 ```{r}
 print(paste("Die beste Anzahl von Parametern ist: ", length(predictors(rfe_dt))))
 print("Die Parameter sind:")
@@ -1888,11 +1883,6 @@ Bei der Logistischen Regression nehemn wir die "Logistic Regression All", beim D
 Wir schauen die durchschnittlichen Scores, die Verteilung der Precisions anhand der Kreuzvalidierung, Top-N-Listen, Konfusionsmatrizen, ROC-Kurven und die Feature Importance aller Modelle an und versuchen so, das beste Modell zu evaluieren.
 
 ```{r}
-metrics_all
-```
-
-
-```{r}
 chosen_models <- c("Logistic Regression All", "Decision Tree (RFE)", "Random Forest (Tuned)", "XGBoost (Tuned)")
 metrics_all <- metrics_all %>% filter(model %in% chosen_models)
 ```
@@ -1904,10 +1894,12 @@ metrics_all %>% group_by(model) %>% summarize_if(is.numeric, mean) %>% arrange(d
 ```
 
 In dieser Darstellung sind die durchschnittlichen Scores über die Cross Validation pro Modell aufgezeigt.
-Das beste Modell bezüglich Train CV-Score ist der Random Forest. Er ist jedoch bei allen Kennzahlen fast deckungsgleich wie der XGBoost. 
-Dies macht Sinn, da XGBoost eine Erweiterung des Random Forests ist. 
+
+Das beste Modell bezüglich Train CV-Score für die Precision ist der XGBoost, dicht gefolgt vom Decision Tree. Beim F1-Score hat der Decision Tree die Nase vorne. XGBoost, Random Forest und Decision Tree sind bei beiden Werten sehr nahe beieinander, nur die logistische Regression fällt zurück.
 
 ## Verteilungen der Precision
+
+Als nächstes schauen wir die Verteilungen der zehn Precision Werte an, welche durch die Kreuzvalidierung entstanden ist.
 
 ```{r}
 ggplot(data = metrics_all, aes(x = model, y = precision)) +
@@ -1915,18 +1907,12 @@ ggplot(data = metrics_all, aes(x = model, y = precision)) +
   labs(title = "Verteilung der Precision pro Modell", x = "Modell", y = "Precision")
 ```
 
-In dieser Darstellung werden die Verteilungen der CV-Scores pro Modell aufgezeigt.
-Ein gut optimiertes Modell sollte auf den Cross-Validation Sets möglichst ähnliche Scores aufweisen.
-Damit kann aufgezeigt werden, dass das Modell auf die verschiedenen Testdaten nicht overfittet.
-Wie wir hier sehen sind die Variationen der Precision eher klein. Die ähnlichsten Precision Resultate hat der Decision Tree.
+In dieser Darstellung werden die Verteilungen der CV-Scores pro Modell aufgezeigt. Ein gut optimiertes Modell sollte auf den Cross-Validation Sets möglichst ähnliche Scores aufweisen. Damit kann aufgezeigt werden, dass das Modell auf die verschiedenen Testdaten nicht overfittet. Wie wir hier sehen sind die Variationen der Precision eher klein. Interessanterweise haben der Decision Tree, der Random forest und der XGBoost alle einen Ausreisser gegen unten. Der XGBoost konnte den höchsten Precision Wert erreichen, streut aber relativ stark. Der Decision Tree streut am wenigsten und hat einen ähnlichen Median wie der XGBoost.
 
 
 ## Vergleich der Top-N-Listen
 
-Hier vergleichen wir die Top-N-Listen der Modelle.
-Für jedes Modell wird eine Top-20 Liste der Kunden vom ersten und letzten Validierungsset der Kreuzvalidierung mit den höchsten Werten bei der Prediction gemacht.
-All diese Kunden müssten demnach Käufer sein.
-In den beiden Tabellen stellen wir dar, ob die Modelle auf den jeweiligen Positionen recht behalten haben oder nicht.
+Hier vergleichen wir die Top-N-Listen der Modelle. Für jedes Modell wird eine Top-20 Liste der Kunden vom ersten und letzten Validierungsset der Kreuzvalidierung mit den höchsten Werten bei der Prediction gemacht. All diese Kunden müssten demnach Käufer sein. In den beiden Tabellen stellen wir dar, ob die Modelle auf den jeweiligen Positionen recht behalten haben oder nicht.
 
 ```{r}
 
@@ -1970,12 +1956,12 @@ df
 
 In dieser Darstellungen sind die Anzahl Fehlklassifikationen auf alle 10 Cross Validation Datensätze aufsummiert. Das perfekte Modell hätte auf allen Werten eine 0, also auf allen Top-N Vorhersagen keine Fehler gemacht.
 
-Betrachten wir nur die Falschklassifikationen der Top-3 Vorhersagen, sehen wir, dass "Random Forest" und "XGBoost" am besten abschneiden. Der "Decision Tree" und die "logistische Regression" haben auf die Top-3 Vorhersagen drei oder mehr falsche Vorhersagen gemacht, die Forest Modelle nur null bis einen. XGBoost schneidet hier am besten ab.
+Betrachten wir nur die Falschklassifikationen der Top-3 Vorhersagen, sehen wir, dass der XGBoost mit 0 falschen Klassifizierungen bemerkenswert abschneidet. Auf den Top-10 sind Decision Tree, RandomForest und XGBoost sehr ähnlich. Die Regression ist hingegen sehr konstant: auf den Top-7 vorhersagen hat er nur bei jeweils einem Validierungsset unrecht behalten. 
 
 
 ## Konfusionsmatrizen
 
-Auch die Konfusionsmatrizen werden wieder für die verschiedenen Modelle dargestllt.
+Auch die Konfusionsmatrizen werden für die verschiedenen Modelle dargestellt.
 
 ```{r}
 id_set <- 7
@@ -1986,14 +1972,15 @@ plot_confusion_matrix(random_forest_tuned_predictions_threshold[[id_set]], val_s
 plot_confusion_matrix(xg_boost_tuned_predictions_threshold[[id_set]], val_sets[[id_set]]$has_card, "XGBoost")
 ```
 
-Die Confusion Matritzen der Modelle sehen sich sehr grundsätzlich ähnlich. 
-Einzig bei der logistischen Regression sind die false-positive Werte höher als bei den übrigen Modellen.
-
+Die Confusion Matritzen der Modelle Random Forest, Decision Tree und XGBoost sind sich sehr ähnlich. Einzig die Regression fällt wieder ab.
 
 ## ROC Kurven
 
+Als letztes schauen wir uns noch die ROC Kurven an.
 
 ```{r}
+id_set <- 3
+
 get_mean <- function(cv_results)
 {
   res <- as.matrix(cv_results[[1]])
@@ -2034,13 +2021,9 @@ make_roc_plot_and_get_auc_list(list(regression_all_predictions[[id_set]], decisi
 
 ```
 
-In dieser Grafik wurden die ROC Kurven der verschiedenen Modelle übereinander geplottet.
-Um dies auf den Trainingsdaten tun zu können, wurde ein zufälliges Train/Val Packet gewählt.
+In dieser Grafik wurden die ROC Kurven der verschiedenen Modelle übereinander geplottet. Um dies auf den Trainingsdaten tun zu können, wurde ein zufälliges Train/Val Paket gewählt.
 
-Die ROC Kurve sollte sich möglichst weit von der grauen Linie entfernen, dies tut sie auch bei allen Modellen recht gut.
-Es ist schwierig visuell zu erkennen, ob nun XGBoost oder Random Forest sich weiter nach oben links entfernt.
-Durch den AUC wird deutlich, dass der Random Forest leicht die Nase vorn hat.
-
+Die ROC Kurve sollte sich möglichst weit von der grauen Linie entfernen, dies tut sie auch bei allen Modellen recht gut. Die AUC's der noch relevanten Modelle sind alle über einem Wert von 0.83. Random Forest und XGBoost sind hier sehr ähnlich, Decision Tree ein wenig schlechter. Dies liegt aber auch daran, dass beim Decision Tree eine nicht so schöne Kurve entstanden ist. 
 
 ## Feature Importance
 
@@ -2079,24 +2062,25 @@ df <- data.frame("Random Forest" = most_important_random_forest[1:10], "Decision
 df
 ```
 
+Die wichtigesn Features sind beim Random Forest und dem Decision Tree sehr ähnlich, was daran liegt, dass beide das gleiche Subset anhand des RFE's des Decision Trees verwenden. Aber auch der XGBoost benutzt ähnliche Features. Die eigenen Variablen der letzten Monate über die Balance scheinen allgemein die grösste Wichtigkeit zu haben. Interessanterweise ist beim XGBoost auf Platz 7 noch eine Zielbank der Orders vorhanden. Die Logistische Regression fälllt wieder einmal komplett aus der Reihe: Die wichtigsten Features wirken sehr willkürlich. 
 
 ## Fazit der Modellevaluierung
 
-Das beste Modell bezüglich der errechneten Scores, des ROC/AUC ist der Random Forest.
-In der Top-N Analyse und der Confusion Matrix ist er mit der Beste und annähernd so performant wie XGBoost.
-In Folge wird nun versucht, ob der Random Forest noch weiter reduziert werden könnte, ohne dass er grosse Performance-Verluste hat. Anschliessend trainieren wir ihn auf allen Trainingsdaten und analysieren ihn auf den Testdaten.
+Bei den durchschnittlichen Metriken macht XGBoost das Rennen bezüglich Precision, unserer Zielvariabel. Diese ist aber nur minim besser als die Precision des Decision Trees. Dieser hat dafür einen höheren F1-Score. Bei Streuung der verschiedenen Werte ist Decision Tree der konstanteste. Auch der Median der Precision ist beim Decision Tree nur knapp unter dem XGBoost. Bei den Konfusionsmatrix ist kein Favorit auszumachen. Bei der ROC-Kurve sind der Random Forest und der XGBoost die Gewinner.
+
+Die Favoriten sind also XGBoost und Decision Tree. Da die Interpretierbarkeit des Decision Trees viel höher ist (einerseits dank dem Modellalgorithmus selber, andererseits dank den wenigen verwendeten Features) und er abgesehen von der ROC-Kurve fast identische Werte wie der XGBoost liefert, haben wir uns dafür entschieden, den Decision Tree als unser bestes Modell zu wählen.
+
+In Folge wird nun versucht, ob der Decision Tree sogar noch weiter reduziert werden könnte, ohne dass er grosse Performance-Verluste hat. Anschliessend trainieren wir ihn auf allen Trainingsdaten und analysieren ihn auf den Testdaten.
 
 ## Reduzieren des besten Modelles
 
-```{r}
-length(most_important_random_forest)
-```
-
+Wir versuchen, anhand der Feature-Importance-Liste des Decison Trees, herauszufinden, ob das Modell mit weniger Variabeln eine gleich gute Vorhersage machen kann. Dafür starten wir mit dem wichtigsten Feature und fügen immer ein neues hinzu. Dabei messen wir überall die Precision und den F1-Score anhand der Kreuzvalidierung. So sehen wir, wie stark das Modell einbüsst, wenn wir Features entfernen.
 
 ```{r}
 precisions <- c()
+f1s <- c()
 
-for (i in 1:length(most_important_random_forest)) {
+for (i in 1:length(most_important_decision_tree)) {
 
 final_model_reduced_metrics <- list()
 final_model_reduced_predictions <- list()
@@ -2107,9 +2091,7 @@ control = rpart.control(mtry = 15, splitrule = "extratrees", ntrees = 500, maxde
 
 for(j in 1:length(val_sets)) {
   
-  train_sets[[j]]$has_card <- as.factor(train_sets[[j]]$has_card)
-  
-  final_model_reduced <- randomForest(has_card ~ ., data = train_sets[[j]] %>% select(all_of(most_important_random_forest), has_card), method = "class", control = control)
+  final_model_reduced <- rpart(has_card ~ ., data = train_sets[[j]] %>% select(all_of(most_important_decision_tree[1:i]), has_card), method = "class")
   
   final_model_reduced_predictions[[j]] <- predict(final_model_reduced, val_sets[[j]], type = "prob")[, 2]
   
@@ -2117,7 +2099,7 @@ for(j in 1:length(val_sets)) {
   
   final_model_reduced_predictions_threshold[[j]] <- ifelse(final_model_reduced_predictions[[j]] > threshold, TRUE, FALSE)
 
-  final_model_reduced_metrics[[j]] <- get_metrics(final_model_reduced_predictions_threshold[[j]], val_sets[[j]]$has_card, "Random Forest (Tuned)")
+  final_model_reduced_metrics[[j]] <- get_metrics(final_model_reduced_predictions_threshold[[j]], val_sets[[j]]$has_card, "Final Model Reduced")
   
 }
 
@@ -2127,47 +2109,58 @@ final_model_reduced_metrics <- do.call("rbind", final_model_reduced_metrics)
 precision <- mean(final_model_reduced_metrics$precision)
 precisions <- c(precisions, precision)
 
+f1 <- mean(final_model_reduced_metrics$f1)
+f1s <- c(f1s, f1)
+
 }
 
-# Find the index of the maximum f1-score
 best_index <- which.max(precisions)
-
-# Print the best f1-score and the corresponding number of variables
-print(paste("Best precisions:", precisions[best_index]))
+print(paste("Best Precision:", precisions[best_index]))
 print(paste("Number of variables:", best_index))
 
-# Plot the f1-scores
-plot(1:length(precisions), precisions, type = "l", xlab = "Anzahl Variabeln", ylab = "Precision")
+
+print("")
+
+best_index <- which.max(f1s)
+print(paste("Best F1:", f1s[best_index]))
+print(paste("Number of variables:", best_index))
+
+plot(1:length(precisions), precisions, type = "l", xlab = "Anzahl Variabeln", ylab = "Precision", main = "Precision mit verschiedener Anzahl Variablen")
+plot(1:length(precisions), f1s, type = "l", xlab = "Anzahl Variabeln", ylab = "F1", main = "F1 mit verschiedener Anzahl Variablen")
 
 ```
+
+Das Modell hat also die gleiche Performance, wenn nur die Hälfte der Variabeln gebraucht wird. Dies steigert die Interpretierbarkeit nochmals enorm.
 
 # Bestes Modell auf den Testdaten
 
+Nun trainieren wir das reduzierte, beste Modell mit den gesamten Trainingsdaten und schauen, wie sich das Modell bezüglich den Testdaten schlägt. Wir machen das ganze zwei Mal: Einerseits mit dem vorher verwendeten Off-Time Train-Test-Split, andererseits mit einem Random Train-Test-Split.
+
 ## Mit Off-Time Split
 
-
 ```{r}
-#refit
-train$has_card <- as.factor(train$has_card)
-
-random_forest_refit <- randomForest(has_card ~ ., data = train %>% select(most_important_random_forest[1:best_index], has_card), method = "class", mtry = 100)
-
-random_forest_refit_predictions <- predict(random_forest_refit, test, type = "prob")[, 2]
-
-threshold <- 0.5
-
-random_forest_refit_predictions_threshold <- ifelse(random_forest_refit_predictions > threshold, TRUE, FALSE)
-
-random_forest_refit_metrics <- get_metrics(random_forest_refit_predictions_threshold, test$has_card, "Random Forest Refit Off Time")
-random_forest_refit_metrics
+splits <- split_data(final_df_simplified, test_size = 0.2, off_time = TRUE)
+train <- splits$train
+test <- splits$test
 ```
 
-Die Scores auf dem Testdaten fallen wie zu erwarten war etwas tiefer aus als die gemittelten Train Scores.
-Die Accuracy bleibt jedoch noch über 0.8.
+```{r}
+final_model_reduced <- rpart(has_card ~ ., data = train %>% select(all_of(most_important_decision_tree[1:best_index]), has_card), method = "class")
+  
+final_model_reduced_predictions <- predict(final_model_reduced, test, type = "prob")[, 2]
+  
+threshold <- 0.5
+  
+final_model_reduced_predictions_threshold <- ifelse(final_model_reduced_predictions > threshold, TRUE, FALSE)
+
+get_metrics(final_model_reduced_predictions_threshold, test$has_card, "Final Model Refit Off-Time")
+```
+
+Wie zu erwarten sind die Metriken ein wenig tiefer als bei der Kreuzvalidierung. Trotzdem ist der Wert von ca. 0.75 eine kleine Enttäuschung. Wir dürfen nun aber keine weiteren Anpassungen mehr vornehmen, da wir sonst auf den Testdatensatz optimieren würden.
 
 ## Mit Random Split
 
-Bis jetzt haben wir alle Modelle mit Off-Time-Daten evaluiert. Zum Schluss möchen wir noch schauen, ob unsere Metriken bei zufälligen Testdaten besser werden würden. Dafür müssen wir einen neuen Train-Test-Split erstellen.
+Bis jetzt haben wir alle Modelle mit Off-Time-Daten evaluiert. Zum Schluss möchen wir noch schauen, ob unsere Metriken bei zufälligen Testdaten besser werden würden. Dafür müssen wir einen neuen Train-Test-Split erstellen. Unserer Erwartung ist, dass die Scores ein wenig höher werden.
 
 
 ```{r}
@@ -2177,45 +2170,32 @@ test <- splits$test
 ```
 
 ```{r}
-#refit
-train$has_card <- as.factor(train$has_card)
+final_model_reduced <- rpart(has_card ~ ., data = train %>% select(all_of(most_important_decision_tree[1:best_index]), has_card), method = "class")
+  
+  final_model_reduced_predictions <- predict(final_model_reduced, test, type = "prob")[, 2]
+  
+  threshold <- 0.5
+  
+  final_model_reduced_predictions_threshold <- ifelse(final_model_reduced_predictions > threshold, TRUE, FALSE)
 
-random_forest_refit <- randomForest(has_card ~ ., data = train %>% select(most_important_random_forest[1:best_index], has_card), method = "class", mtry = 100)
-
-random_forest_refit_predictions <- predict(random_forest_refit, test, type = "prob")[, 2]
-
-threshold <- 0.5
-
-random_forest_refit_predictions_threshold <- ifelse(random_forest_refit_predictions > threshold, TRUE, FALSE)
-
-random_forest_refit_metrics <- get_metrics(random_forest_refit_predictions_threshold, test$has_card, "Random Forest Refit Random")
-random_forest_refit_metrics
+  get_metrics(final_model_reduced_predictions_threshold, test$has_card, "Final Model Refit Random")
 ```
 
+Wir hatten recht: Die Metriken werden höher. Vor allem die Precision profitiert von dem anderen Train-Test-Split. Aber auch wennn diese Scores hier höher sind, ist die Off-Time Variante die sinnvollere für eine reale Anwendung. Es müssen immer Zeitpunkte in der Zukunft vorhergesagt werden. 
 
+# Schlusswort
 
-
-
-
-# Fazit
+Wir haben vier verschiedene Modellalgorithmen mit unterschiedlichen Subsets an Daten und mit optimierten Hyperparametern mit Kreuzvalidierung trainiert, die Resultate verglichen und uns für ein bestes Modell entschieden. Bei diesem handelt es sich um ein eher simples Modell, welches eine hohe Interpretierbarkeit bietet. Auf den Testdaten konnte unser Modell nicht ganz so gut performen, wie wir es gehofft haben. Trotzdem bietet dieses Modell einen Mehrwert für die Bank.
 
 ## Mehrwert des Modells in der Praxis
 
-Bei unserem Model handelt es sich um ein Product Affinity Model.
-Es soll voraussagen, ob eine Person (hier eine Kund:in der Bank) ein bestimmtes Produkt kauft (hier eine Kreditkarte) oder nicht.
-Ausserdem gibt unser Modell auch an, mit welcher Wahrscheinlichkeit sie diese kauft.
-Dies könnte von grossem Mehrwert für eine Bank sein, da sie anhand des Modells die Marketing-Strategie optimieren und ihre Ressourcen gezielter einsetzen können.
+Bei unserem Model handelt es sich um ein Product Affinity Model. Es soll voraussagen, ob eine Person (hier eine Kund:in der Bank) ein bestimmtes Produkt kauft (hier eine Kreditkarte) oder nicht. Ausserdem gibt unser Modell auch an, mit welcher Wahrscheinlichkeit sie diese kauft. Dies könnte von grossem Mehrwert für eine Bank sein, da sie anhand des Modells die Marketing-Strategie optimieren und ihre Ressourcen gezielter einsetzen können.
 
-Es kann Banken helfen, ihre Marketing-Bemühungen besser zu segmentieren, indem es zeigt, wer wahrscheinlich an einer Kreditkarte interessiert ist und wer nicht.
-Dies kann dazu beitragen, die Conversion-Rate zu verbessern und die Kosten für Marketing-Aktionen zu senken.
+Es kann Banken helfen, ihre Marketing-Bemühungen besser zu segmentieren, indem es zeigt, wer wahrscheinlich an einer Kreditkarte interessiert ist und wer nicht. Dies kann dazu beitragen, die Conversion-Rate zu verbessern und die Kosten für Marketing-Aktionen zu senken.
 
-Ein weiterer Vorteil, den ein Product Affinity Model bieten kann, ist, dass es Banken helfen kann, ihre Kundenbeziehungen zu verbessern, indem es ihnen ermöglicht, personalisierte Angebote und Services anzubieten.
-
-Wenn das Modell vorhersagt, wer wahrscheinlich eine Kreditkarte kaufen wird, können Banken ihren Kunden personalisierte Angebote und Services anbieten, die auf ihre individuellen Bedürfnisse und Vorlieben abgestimmt sind.
+Ein weiterer Vorteil, den ein Product Affinity Model bieten kann, ist, dass es Banken helfen kann, ihre Kundenbeziehungen zu verbessern, indem es ihnen ermöglicht, personalisierte Angebote und Services anzubieten. Wenn das Modell vorhersagt, wer wahrscheinlich eine Kreditkarte kaufen wird, können Banken ihren Kunden personalisierte Angebote und Services anbieten, die auf ihre individuellen Bedürfnisse und Vorlieben abgestimmt sind.
 Dies kann dazu beitragen, die Kundenzufriedenheit zu erhöhen und die Kundenbindung zu stärken.
 Dafür müsste das Modell aber noch erweitert werden.
 
 Ein personalisiertes Angebot könnte beispielsweise eine Kreditkarte sein, die speziell auf die Bedürfnisse und Vorlieben eines Kunden abgestimmt ist, z.B.
-mit einem hohen Rückzahlungsprozentsatz für bestimmte Kategorien von Einkäufen oder mit Reiseversicherungen und anderen Vorteilen, die für den Kunden besonders wichtig sind.
-
-Indem Banken ihren Kunden personalisierte Angebote und Services anbieten, können sie ihre Beziehungen zu ihnen stärken und ihre Zufriedenheit erhöhen.
+mit einem hohen Rückzahlungsprozentsatz für bestimmte Kategorien von Einkäufen oder mit Reiseversicherungen und anderen Vorteilen, die für den Kunden besonders wichtig sind. Indem Banken ihren Kunden personalisierte Angebote und Services anbieten, können sie ihre Beziehungen zu ihnen stärken und ihre Zufriedenheit erhöhen.
